@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+sqlalchemy
+asyncpg
+ccxt
+cryptography
+passlib[bcrypt]
+bcrypt<4
+python-dotenv
+pydantic
+pydantic-settings

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% from "sidebar.html" import sidebar %}
+
+{% block body %}
+<div class="min-h-screen">
+    <div class="flex min-h-screen">
+        {{ sidebar("config") }}
+
+        <main class="flex-1 p-4">
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                <div class="border-2 border-black p-4 lg:col-span-8">
+                    <h2 class="text-lg font-semibold uppercase tracking-wider">Exchanges</h2>
+                </div>
+                <div class="panel-secondary p-4 lg:col-span-4">
+                    <div class="ops-summary">
+                        <div class="ops-summary-row">
+                            <span>Exchange connected</span>
+                            <span class="font-semibold num loading-text" id="config-exchange-count">Loading</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if msg %}
+            <div class="mt-4 border-2 border-black p-3 text-xs uppercase tracking-wider {% if success %}bg-green-100 text-green-900{% else %}bg-red-100 text-red-900{% endif %}">
+                {{ msg }}
+            </div>
+            {% endif %}
+
+            <div class="mt-4 border-2 border-black p-4 xl:max-w-2xl">
+                <form action="/config" method="post" class="space-y-4">
+                    <div class="panel-secondary p-3">
+                        <div class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider">
+                            Exchange Credentials
+                        </div>
+                        <div class="mt-3 grid grid-cols-1 gap-3">
+                            <div>
+                                <label class="block text-xs uppercase tracking-wider">Exchange</label>
+                                <select name="exchange_name" id="exchange-select" class="mt-1 block w-full border-2 border-black bg-transparent px-2 py-1 text-sm focus:outline-none" required>
+                                    {% for ex in exchanges %}
+                                    <option value="{{ ex }}">{{ ex|upper }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase tracking-wider">API Key</label>
+                                <input type="text" name="api_key" required placeholder="API Key"
+                                       class="mt-1 block w-full border-2 border-black bg-transparent px-2 py-1 text-sm focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase tracking-wider">Client Secret</label>
+                                <input type="password" name="api_secret" required placeholder="API Secret"
+                                       class="mt-1 block w-full border-2 border-black bg-transparent px-2 py-1 text-sm focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary w-full border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]">
+                        [ Verify & Save ]
+                    </button>
+                </form>
+            </div>
+
+            <div class="mt-4 panel-secondary p-4">
+                <h3 class="text-sm font-semibold uppercase tracking-wider">Connected APIs</h3>
+                <div class="mt-3 text-sm font-editorial loading-text" id="config-loading">Loading</div>
+                <p class="mt-3 hidden text-sm font-editorial" id="config-empty">No credentials saved.</p>
+                <p class="mt-3 hidden text-sm font-editorial text-red-700" id="config-error">Unable to load credentials.</p>
+                <div class="mt-3 hidden overflow-x-auto" id="config-table">
+                    <table class="min-w-full text-xs">
+                        <thead>
+                            <tr class="border-b-2 border-black">
+                                <th class="px-4 py-2 text-left uppercase tracking-wider">Saved At</th>
+                                <th class="px-4 py-2 text-left uppercase tracking-wider">Exchange</th>
+                                <th class="px-4 py-2 text-left uppercase tracking-wider">Client ID</th>
+                                <th class="px-4 py-2 text-left uppercase tracking-wider">Client Secret</th>
+                                <th class="px-4 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="config-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+<script>
+    const exchangeSelect = document.getElementById("exchange-select")
+    const loadConfigData = () => {
+        return fetch(`/config/data`, { credentials: "same-origin" })
+    }
+    const renderConfig = (data) => {
+        if (!data || data.error) throw new Error("load_failed")
+        const loading = document.getElementById("config-loading")
+        const exchangeCount = document.getElementById("config-exchange-count")
+        if (loading) loading.classList.add("hidden")
+        const empty = document.getElementById("config-empty")
+        const errorEl = document.getElementById("config-error")
+        const table = document.getElementById("config-table")
+        const body = document.getElementById("config-body")
+        const credentials = data.credentials || []
+        if (exchangeCount) exchangeCount.textContent = `${credentials.length}`
+        if (exchangeCount) exchangeCount.classList.remove("loading-text")
+        if (!credentials.length) {
+            if (errorEl) errorEl.classList.add("hidden")
+            if (empty) empty.classList.remove("hidden")
+            if (table) table.classList.add("hidden")
+            return
+        }
+        if (table) table.classList.remove("hidden")
+        if (body) {
+            body.innerHTML = credentials.map((c) => `
+                <tr class="border-b border-black">
+                    <td class="px-4 py-2">${c.created_at}</td>
+                    <td class="px-4 py-2">${(c.exchange_name || "").toUpperCase()}</td>
+                    <td class="px-4 py-2">${c.client_id}</td>
+                    <td class="px-4 py-2">${c.masked_secret}</td>
+                    <td class="px-4 py-2 text-right">
+                        <form action="/config/disconnect" method="post">
+                            <input type="hidden" name="credentials_id" value="${c.id}">
+                            <button type="submit" class="border-2 border-black bg-[#F8E0E0] px-3 py-1 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]">[ Disconnect ]</button>
+                        </form>
+                    </td>
+                </tr>
+            `).join("")
+        }
+        document.querySelectorAll(".loading-text").forEach((el) => el.classList.remove("loading-text"))
+    }
+    const loadAndRender = () => {
+        const loading = document.getElementById("config-loading")
+        const empty = document.getElementById("config-empty")
+        const errorEl = document.getElementById("config-error")
+        const table = document.getElementById("config-table")
+        if (loading) loading.classList.remove("hidden")
+        if (empty) empty.classList.add("hidden")
+        if (errorEl) errorEl.classList.add("hidden")
+        if (table) table.classList.add("hidden")
+        loadConfigData()
+            .then((res) => res.ok ? res.json() : Promise.reject(res))
+            .then(renderConfig)
+            .catch(() => {
+                if (loading) loading.classList.add("hidden")
+                if (errorEl) errorEl.classList.remove("hidden")
+            })
+    }
+    loadAndRender()
+    if (exchangeSelect) {
+        exchangeSelect.addEventListener("change", () => {
+            loadAndRender()
+        })
+    }
+</script>
+{% endblock %}

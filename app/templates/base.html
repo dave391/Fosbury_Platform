@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fosbury Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Merriweather:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/static/logo.png" type="image/png">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="antialiased">
+    <main class="min-h-screen">
+        {% block body %}
+            <header class="border-b-2 border-black">
+                <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+                    <a href="/" class="flex items-center gap-2">
+                        <img src="/static/logo.png" alt="Fosbury Platform" class="sidebar-logo">
+                        <span class="text-[1.125rem] font-semibold uppercase tracking-[0.12em]">FOSBURY PLATFORM</span>
+                    </a>
+                    <nav class="flex items-center gap-2">
+                        {% if request.url.path == "/login" %}
+                        {% else %}
+                            {% if request.url.path == "/" %}
+                                <a href="/login" class="nav-link">Log in</a>
+                                <a href="/register" class="nav-link">Sign up</a>
+                            {% else %}
+                                <a href="/" class="nav-link">Home</a>
+                                <a href="/login" class="nav-link">Log in</a>
+                                <a href="/register" class="nav-link">Sign up</a>
+                                <a href="/dashboard" class="nav-link">Dashboard</a>
+                                <a href="/strategy" class="nav-link">Strategy</a>
+                                <a href="/config" class="nav-link">Exchanges</a>
+                                <a href="/logout" class="nav-link nav-link-danger">Log out</a>
+                            {% endif %}
+                        {% endif %}
+                    </nav>
+                </div>
+            </header>
+            <div class="mx-auto max-w-5xl px-4 py-6">
+                {% block content %}{% endblock %}
+            </div>
+        {% endblock %}
+    </main>
+</body>
+</html>

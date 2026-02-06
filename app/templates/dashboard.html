@@ -1,0 +1,684 @@
+{% extends "base.html" %}
+{% from "sidebar.html" import sidebar %}
+
+{% block body %}
+<div class="min-h-screen">
+    <div class="flex min-h-screen">
+        {{ sidebar("dashboard") }}
+
+        <main class="flex-1 p-4">
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                <div class="page-header lg:col-span-8">
+                    <h2 class="page-title">Overview</h2>
+                    {% if has_active and selected_strategy %}
+                    <div class="page-subtitle">View: {{ selected_strategy.name }}</div>
+                    {% endif %}
+                </div>
+                <div class="panel-secondary p-4 lg:col-span-4">
+                    <div class="ops-summary">
+                        <div class="ops-summary-row">
+                            <span>Running strategy</span>
+                            <span class="font-semibold num">{{ active_strategies|length if active_strategies else 0 }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <div class="inline-flex border-2 border-black bg-[#F5F5F0] text-xs uppercase tracking-wider" data-view-toggle>
+                    <button type="button" class="px-3 py-2 font-semibold bg-[#E7E1FF]" data-view-button data-view="current">[ Current ]</button>
+                    <button type="button" class="px-3 py-2" data-view-button data-view="historical">[ Historical ]</button>
+                </div>
+            </div>
+
+            <div class="mt-4" data-dashboard-views data-default-view="current">
+                <div data-view-panel="current">
+                    {% if not has_active %}
+                    <div class="border-2 border-black p-4">
+                        <p class="text-sm font-editorial">No active strategy.</p>
+                        <a class="btn-primary mt-3 inline-block border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" href="/strategy">[ Go to Strategy ]</a>
+                    </div>
+                    {% else %}
+                    <div class="border-2 border-black p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <h3 class="text-sm font-semibold uppercase tracking-wider">Active Strategies</h3>
+                            <form action="/dashboard" method="get" class="flex flex-wrap items-center gap-2">
+                                <select name="strategy_id" class="border border-black bg-transparent px-2 py-1 text-xs">
+                                    <option value="">All</option>
+                                {% for s in active_strategies %}
+                                    <option value="{{ s.id }}" {% if strategy_filter_id == s.id %}selected{% endif %}>
+                                        {{ s.name }} · {{ s.asset }} · {{ s.exchange_name|capitalize }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn-primary border border-black bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]">[ Apply ]</button>
+                            </form>
+                        </div>
+                        <div class="mt-3 overflow-x-auto">
+                            <table class="min-w-full text-xs">
+                                <thead>
+                                    <tr class="border-b-2 border-black">
+                                        <th class="py-2 text-center uppercase tracking-wider">Strategy</th>
+                                        <th class="py-2 text-center uppercase tracking-wider">Exchange</th>
+                                        <th class="py-2 text-center uppercase tracking-wider">Asset</th>
+                                        <th class="py-2 text-center uppercase tracking-wider">Starting Capital</th>
+                                        <th class="py-2 text-center uppercase tracking-wider">Current Capital</th>
+                                        <th class="py-2 text-center uppercase tracking-wider">Days</th>
+                                        <th class="py-2 text-center uppercase tracking-wider">APR%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for s in table_rows %}
+                                    <tr class="border-b border-black">
+                                        <td class="py-2 text-center">{{ s.name }}</td>
+                                        <td class="py-2 text-center">{{ s.exchange_name|capitalize }}</td>
+                                        <td class="py-2 text-center">{{ s.asset }}</td>
+                                        <td class="py-2 text-center num">{{ s.allocated_capital_usdc|round(2) }} USDC</td>
+                                        <td class="py-2 text-center num">{{ s.current_capital_usdc|round(2) }} USDC</td>
+                                        <td class="py-2 text-center num">{{ s.days_active }}</td>
+                                        <td class="py-2 text-center num {% if s.apr_percent < 0 %}text-red-700{% elif s.apr_percent > 0 %}text-green-700{% endif %}">{{ s.apr_percent|round(2) }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+                        <div class="border-2 border-black p-4 xl:col-span-8">
+                            <h3 class="text-sm font-semibold uppercase tracking-wider">Cumulative PnL</h3>
+                            <div class="mt-3 text-sm font-editorial loading-text" id="equity-loading">Loading</div>
+                            <div class="mt-3 hidden" id="equity-chart">
+                                <div class="relative">
+                                    <svg viewBox="0 0 {{ equity_chart.width }} {{ equity_chart.height }}" class="h-64 w-full">
+                                        <g id="equity-axes"></g>
+                                        <g id="equity-lines"></g>
+                                    </svg>
+                                    <div id="equity-tooltip" class="equity-tooltip hidden"></div>
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-wider" id="equity-legend"></div>
+                            </div>
+                            <p class="mt-3 hidden text-sm font-editorial" id="equity-empty">No snapshots available.</p>
+                            
+                        </div>
+                        <div class="xl:col-span-4">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">PnL</p>
+                                    <p class="mt-2 text-lg font-semibold loading-text num" id="metric-pnl">Loading</p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">APR</p>
+                                    <p class="mt-2 text-lg font-semibold"><span id="metric-apr" class="loading-text num">Loading</span></p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">Allocated Capital</p>
+                                    <p class="mt-2 text-lg font-semibold num">{{ metrics.allocated_capital_usdc|round(2) }} USDC</p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">Current Balance</p>
+                                    <p class="mt-2 text-lg font-semibold num"><span id="metric-current-card" class="loading-text num">Loading</span></p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">Fees</p>
+                                    <p class="mt-2 text-lg font-semibold loading-text num" id="metric-fees">Loading</p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">Days Active</p>
+                                    <p class="mt-2 text-lg font-semibold num">{{ metrics.days_active }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div data-view-panel="historical">
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                        <div class="border-2 border-black p-4 xl:col-span-8">
+                            <h3 class="text-sm font-semibold uppercase tracking-wider">Cumulative PnL</h3>
+                            <div class="mt-3 text-sm font-editorial loading-text" id="historical-equity-loading">Loading</div>
+                            <div class="mt-3 hidden" id="historical-equity-chart">
+                                <div class="relative">
+                                    <svg viewBox="0 0 {{ equity_chart.width }} {{ equity_chart.height }}" class="h-64 w-full">
+                                        <g id="historical-equity-axes"></g>
+                                        <g id="historical-equity-lines"></g>
+                                    </svg>
+                                    <div id="historical-equity-tooltip" class="equity-tooltip hidden"></div>
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-wider" id="historical-equity-legend"></div>
+                            </div>
+                            <p class="mt-3 hidden text-sm font-editorial" id="historical-equity-empty">No closed strategies yet.</p>
+                        </div>
+                        <div class="xl:col-span-4">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">Closed Strategies</p>
+                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-count">Loading</p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">Total PnL</p>
+                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-pnl">Loading</p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">APR</p>
+                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-apr">Loading</p>
+                                </div>
+                                <div class="panel-secondary p-4">
+                                    <p class="text-xs uppercase tracking-wider">Fees</p>
+                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-fees">Loading</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 border-2 border-black p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <h3 class="text-sm font-semibold uppercase tracking-wider">Closed Strategies</h3>
+                        </div>
+                        {% if historical_rows %}
+                        <div class="mt-3 overflow-x-auto">
+                            <table class="min-w-full text-xs" id="historical-closed-table">
+                                <thead>
+                                    <tr class="border-b-2 border-black">
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="start">
+                                                <span>Start</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="stop">
+                                                <span>Stop</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="name">
+                                                <span>Strategy</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="exchange">
+                                                <span>Exchange</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="asset">
+                                                <span>Asset</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="starting_capital_usdc">
+                                                <span>Starting Capital</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="final_capital_usdc">
+                                                <span>Final Capital</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="pnl_usdc">
+                                                <span>PnL</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="fees_usdc">
+                                                <span>Fee</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="apr_percent">
+                                                <span>APR%</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historical-closed-body">
+                                    {% for s in historical_rows %}
+                                    <tr class="border-b border-black">
+                                        <td class="py-2 text-center" data-value="{{ s.start }}">{{ s.start }}</td>
+                                        <td class="py-2 text-center" data-value="{{ s.stop }}">{{ s.stop }}</td>
+                                        <td class="py-2 text-center" data-value="{{ s.name }}">{{ s.name }}</td>
+                                        <td class="py-2 text-center" data-value="{{ s.exchange_name|capitalize }}">{{ s.exchange_name|capitalize }}</td>
+                                        <td class="py-2 text-center" data-value="{{ s.asset }}">{{ s.asset }}</td>
+                                        <td class="py-2 text-center num" data-value="{{ s.starting_capital_usdc }}">{{ s.starting_capital_usdc|round(2) }} USDC</td>
+                                        <td class="py-2 text-center num" data-value="{{ s.final_capital_usdc }}">{{ s.final_capital_usdc|round(2) }} USDC</td>
+                                        <td class="py-2 text-center num {% if s.pnl_usdc < 0 %}text-red-700{% endif %}" data-value="{{ s.pnl_usdc }}">{{ s.pnl_usdc|round(2) }} USDC</td>
+                                        <td class="py-2 text-center num" data-value="{{ s.fees_usdc }}">{{ s.fees_usdc|round(2) }} USDC</td>
+                                        <td class="py-2 text-center num {% if s.apr_percent < 0 %}text-red-700{% elif s.apr_percent > 0 %}text-green-700{% endif %}" data-value="{{ s.apr_percent }}">{{ s.apr_percent|round(2) }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="mt-3 text-sm font-editorial">No closed strategies yet.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+<script>
+    const params = new URLSearchParams(window.location.search)
+    const strategyId = params.get("strategy_id")
+    const url = strategyId ? `/dashboard/data?strategy_id=${strategyId}` : "/dashboard/data"
+    const setupClosedTableSorting = () => {
+        const table = document.getElementById("historical-closed-table")
+        const body = document.getElementById("historical-closed-body")
+        if (!table || !body) return
+        const headers = Array.from(table.querySelectorAll("[data-sort-key]"))
+        if (!headers.length) return
+        const typeByKey = {
+            start: "date",
+            stop: "date",
+            name: "text",
+            exchange: "text",
+            asset: "text",
+            starting_capital_usdc: "number",
+            final_capital_usdc: "number",
+            pnl_usdc: "number",
+            fees_usdc: "number",
+            apr_percent: "number",
+        }
+        const state = { key: "stop", dir: "desc" }
+        const getValue = (row, index, type) => {
+            const cell = row.children[index]
+            if (!cell) return type === "number" ? 0 : ""
+            const raw = cell.getAttribute("data-value") ?? cell.textContent.trim()
+            if (type === "number") return Number(raw) || 0
+            if (type === "date") return raw ? new Date(raw).getTime() : 0
+            return raw.toString().toLowerCase()
+        }
+        const updateIndicators = () => {
+            headers.forEach((btn) => {
+                const indicator = btn.querySelector("[data-sort-indicator]")
+                if (!indicator) return
+                indicator.textContent = btn.dataset.sortKey === state.key ? (state.dir === "asc" ? "▲" : "▼") : ""
+            })
+        }
+        const sortRows = () => {
+            const key = state.key
+            const th = table.querySelector(`[data-sort-key="${key}"]`)?.closest("th")
+            if (!th) return
+            const index = Array.from(th.parentNode.children).indexOf(th)
+            const type = typeByKey[key] || "text"
+            const rows = Array.from(body.querySelectorAll("tr"))
+            rows.sort((a, b) => {
+                const av = getValue(a, index, type)
+                const bv = getValue(b, index, type)
+                if (av < bv) return state.dir === "asc" ? -1 : 1
+                if (av > bv) return state.dir === "asc" ? 1 : -1
+                return 0
+            })
+            rows.forEach((row) => body.appendChild(row))
+        }
+        headers.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const key = btn.dataset.sortKey
+                if (!key) return
+                if (state.key === key) {
+                    state.dir = state.dir === "asc" ? "desc" : "asc"
+                } else {
+                    state.key = key
+                    state.dir = key === "stop" ? "desc" : "asc"
+                }
+                updateIndicators()
+                sortRows()
+            })
+        })
+        updateIndicators()
+        sortRows()
+    }
+    const renderChart = ({ prefix, series, min, max, dates, selectedId }) => {
+        const loadingEl = document.getElementById(`${prefix}-loading`)
+        if (loadingEl) loadingEl.classList.add("hidden")
+        const emptyEl = document.getElementById(`${prefix}-empty`)
+        const chartEl = document.getElementById(`${prefix}-chart`)
+        if (!series || series.length === 0) {
+            if (emptyEl) emptyEl.classList.remove("hidden")
+            return
+        }
+        if (chartEl) chartEl.classList.remove("hidden")
+        const linesEl = document.getElementById(`${prefix}-lines`)
+        if (linesEl) linesEl.innerHTML = ""
+        const axesEl = document.getElementById(`${prefix}-axes`)
+        if (axesEl) axesEl.innerHTML = ""
+        const highlightKey = selectedId ? String(selectedId) : (series.find((item) => item.key === "all") ? "all" : String(series[0].key))
+        const palette = ["#6d28d9", "#2563eb", "#0ea5e9", "#10b981", "#f59e0b", "#f97316", "#ef4444", "#ec4899"]
+        const ordered = []
+        const highlighted = []
+        const colorByKey = {}
+        let paletteIndex = 0
+        series.forEach((item) => {
+            if (item.key === "all") {
+                colorByKey[item.key] = "#111111"
+                return
+            }
+            colorByKey[item.key] = palette[paletteIndex % palette.length]
+            paletteIndex += 1
+        })
+        series.forEach((item) => {
+            const isHighlighted = String(item.key) === highlightKey
+            if (isHighlighted) {
+                highlighted.push(item)
+            } else {
+                ordered.push(item)
+            }
+        })
+        const colorFor = (item) => {
+            if (String(item.key) === highlightKey || item.key === "all") {
+                return "#111111"
+            }
+            return colorByKey[item.key] || "#111111"
+        }
+        const drawAxis = () => {
+            if (!axesEl || series.length === 0) return
+            const chart = series[0].chart || {}
+            const width = chart.width || 640
+            const height = chart.height || 220
+            const padding = 20
+            const axisColor = "#111111"
+            const xAxis = document.createElementNS("http://www.w3.org/2000/svg", "line")
+            xAxis.setAttribute("x1", padding)
+            xAxis.setAttribute("y1", height - padding)
+            xAxis.setAttribute("x2", width - padding)
+            xAxis.setAttribute("y2", height - padding)
+            xAxis.setAttribute("stroke", axisColor)
+            xAxis.setAttribute("stroke-width", 1)
+            axesEl.appendChild(xAxis)
+            const yAxis = document.createElementNS("http://www.w3.org/2000/svg", "line")
+            yAxis.setAttribute("x1", padding)
+            yAxis.setAttribute("y1", padding)
+            yAxis.setAttribute("x2", padding)
+            yAxis.setAttribute("y2", height - padding)
+            yAxis.setAttribute("stroke", axisColor)
+            yAxis.setAttribute("stroke-width", 1)
+            axesEl.appendChild(yAxis)
+            const ticks = [min, (min + max) / 2, max]
+            ticks.forEach((value) => {
+                const ratio = max === min ? 0 : (value - min) / (max - min)
+                const y = height - padding - ratio * (height - padding * 2)
+                const tick = document.createElementNS("http://www.w3.org/2000/svg", "line")
+                tick.setAttribute("x1", padding - 4)
+                tick.setAttribute("y1", y)
+                tick.setAttribute("x2", padding)
+                tick.setAttribute("y2", y)
+                tick.setAttribute("stroke", axisColor)
+                tick.setAttribute("stroke-width", 1)
+                axesEl.appendChild(tick)
+                const label = document.createElementNS("http://www.w3.org/2000/svg", "text")
+                label.setAttribute("x", padding + 4)
+                label.setAttribute("y", y + 3)
+                label.setAttribute("fill", axisColor)
+                label.setAttribute("font-size", "8")
+                label.setAttribute("text-anchor", "start")
+                label.textContent = `${value.toFixed(2)}`
+                axesEl.appendChild(label)
+            })
+            if (min <= 0 && max >= 0) {
+                const zeroRatio = max === min ? 0 : (0 - min) / (max - min)
+                const yZero = height - padding - zeroRatio * (height - padding * 2)
+                const zeroLine = document.createElementNS("http://www.w3.org/2000/svg", "line")
+                zeroLine.setAttribute("x1", padding)
+                zeroLine.setAttribute("y1", yZero)
+                zeroLine.setAttribute("x2", width - padding)
+                zeroLine.setAttribute("y2", yZero)
+                zeroLine.setAttribute("stroke", axisColor)
+                zeroLine.setAttribute("stroke-width", 1)
+                zeroLine.setAttribute("stroke-dasharray", "3,3")
+                axesEl.appendChild(zeroLine)
+            }
+            const pointDates = dates || []
+            if (pointDates.length >= 2) {
+                const x1 = padding
+                const x2 = width - padding
+                const y = height - padding + 10
+                const labelStart = document.createElementNS("http://www.w3.org/2000/svg", "text")
+                labelStart.setAttribute("x", x1)
+                labelStart.setAttribute("y", y)
+                labelStart.setAttribute("fill", axisColor)
+                labelStart.setAttribute("font-size", "8")
+                labelStart.setAttribute("text-anchor", "start")
+                labelStart.textContent = pointDates[0]
+                axesEl.appendChild(labelStart)
+                const labelEnd = document.createElementNS("http://www.w3.org/2000/svg", "text")
+                labelEnd.setAttribute("x", x2)
+                labelEnd.setAttribute("y", y)
+                labelEnd.setAttribute("fill", axisColor)
+                labelEnd.setAttribute("font-size", "8")
+                labelEnd.setAttribute("text-anchor", "end")
+                labelEnd.textContent = pointDates[pointDates.length - 1]
+                axesEl.appendChild(labelEnd)
+            }
+        }
+        const draw = (item) => {
+            const chart = item.chart || {}
+            if (!chart.points || !linesEl) return
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline")
+            const isAggregate = item.key === "all"
+            const isHighlighted = String(item.key) === highlightKey
+            const color = colorFor(item)
+            const opacity = isAggregate ? 1 : (isHighlighted ? 1 : selectedId ? 0.2 : 0.3)
+            const width = isAggregate ? 2.5 : (isHighlighted ? 2.2 : 1.5)
+            line.setAttribute("fill", "none")
+            line.setAttribute("stroke", color)
+            line.setAttribute("stroke-width", width)
+            line.setAttribute("stroke-opacity", opacity)
+            line.setAttribute("points", chart.points)
+            linesEl.appendChild(line)
+        }
+        ordered.forEach((item) => draw(item))
+        highlighted.forEach((item) => draw(item))
+        drawAxis()
+        const legendEl = document.getElementById(`${prefix}-legend`)
+        if (legendEl) legendEl.innerHTML = ""
+        series.forEach((item) => {
+            if (!legendEl) return
+            const legendItem = document.createElement("div")
+            legendItem.className = "flex items-center gap-2"
+            const swatch = document.createElement("span")
+            swatch.className = "inline-block h-2 w-2"
+            swatch.style.backgroundColor = colorFor(item)
+            const label = document.createElement("span")
+            label.textContent = item.label
+            legendItem.appendChild(swatch)
+            legendItem.appendChild(label)
+            legendEl.appendChild(legendItem)
+        })
+        const tooltip = document.getElementById(`${prefix}-tooltip`)
+        const svg = chartEl ? chartEl.querySelector("svg") : null
+        const focusSeries = series.find((item) => String(item.key) === highlightKey) || series[0]
+        const points = (focusSeries?.chart?.points || "").trim().split(" ").filter(Boolean)
+        if (tooltip && svg && points.length > 0) {
+            const coords = points.map((point) => {
+                const [x, y] = point.split(",").map((value) => parseFloat(value))
+                return { x, y }
+            })
+            const chart = focusSeries.chart || {}
+            const width = chart.width || 640
+            const height = chart.height || 220
+            const padding = 20
+            const seriesValues = focusSeries.values || []
+            let marker = svg.querySelector(`#${prefix}-marker`)
+            if (!marker) {
+                marker = document.createElementNS("http://www.w3.org/2000/svg", "circle")
+                marker.setAttribute("id", `${prefix}-marker`)
+                marker.setAttribute("r", "3")
+                marker.setAttribute("fill", "#F5F5F0")
+                marker.setAttribute("stroke", "#111111")
+                marker.setAttribute("stroke-width", "1.5")
+                svg.appendChild(marker)
+            }
+            const showTooltip = (index) => {
+                const point = coords[index]
+                if (!point) return
+                let value = seriesValues[index]
+                if (value === undefined || value === null) {
+                    const ratio = max === min ? 0 : (height - padding - point.y) / (height - padding * 2)
+                    value = min + ratio * (max - min)
+                }
+                const dateList = focusSeries.dates || dates || []
+                const dateLabel = dateList[index] || ""
+                const seriesLabel = focusSeries.label || String(focusSeries.key) || "Series"
+                tooltip.innerHTML = `<div>${seriesLabel} · ${dateLabel}</div><div class="num">USDC ${value.toFixed(2)}</div>`
+                const rect = svg.getBoundingClientRect()
+                const scaleX = rect.width / width
+                const scaleY = rect.height / height
+                const px = point.x * scaleX
+                const py = point.y * scaleY
+                tooltip.style.left = `${px + 8}px`
+                tooltip.style.top = `${py - 8}px`
+                tooltip.classList.remove("hidden")
+                marker.setAttribute("cx", `${point.x}`)
+                marker.setAttribute("cy", `${point.y}`)
+                marker.setAttribute("opacity", "1")
+            }
+            const hideTooltip = () => {
+                tooltip.classList.add("hidden")
+                marker.setAttribute("opacity", "0")
+            }
+            svg.addEventListener("mousemove", (event) => {
+                const rect = svg.getBoundingClientRect()
+                const x = event.clientX - rect.left
+                let nearest = 0
+                let nearestDist = Infinity
+                coords.forEach((point, index) => {
+                    const dist = Math.abs(point.x - x)
+                    if (dist < nearestDist) {
+                        nearestDist = dist
+                        nearest = index
+                    }
+                })
+                showTooltip(nearest)
+            })
+            svg.addEventListener("mouseleave", hideTooltip)
+        }
+    }
+    const headerLabelEl = document.getElementById("metric-header-label")
+    const headerValueEl = document.getElementById("metric-current")
+    let totalBalanceValue = null
+    let historicalCountValue = null
+    let activeView = "current"
+    const updateHeaderMetric = () => {
+        if (!headerLabelEl || !headerValueEl) return
+        if (activeView === "historical") {
+            headerLabelEl.textContent = "Closed strategy"
+            headerValueEl.textContent = historicalCountValue ?? "Loading"
+            headerValueEl.classList.add("num")
+        } else {
+            headerLabelEl.textContent = "Total Balance"
+            headerValueEl.textContent = totalBalanceValue ?? "Loading"
+        }
+    }
+    setupClosedTableSorting()
+    fetch(url)
+        .then((res) => res.json())
+        .then((data) => {
+            if (!data || data.error) return
+            const metrics = data.metrics || {}
+            const setText = (id, value) => {
+                const el = document.getElementById(id)
+                if (el) el.textContent = value
+            }
+            const totalBalance = data.total_balance_usdc ?? metrics.current_capital_usdc ?? 0
+            const currentBalance = data.current_balance_usdc ?? metrics.current_capital_usdc ?? 0
+            totalBalanceValue = `${totalBalance.toFixed(2)} USDC`
+            setText("metric-current", totalBalanceValue)
+            setText("metric-current-card", `${currentBalance.toFixed(2)} USDC`)
+            setText("metric-apr", `${(metrics.apr_percent || 0).toFixed(2)}%`)
+            const pnlEl = document.getElementById("metric-pnl")
+            if (pnlEl) {
+                const pnl = metrics.pnl_usdc || 0
+                pnlEl.textContent = `${pnl.toFixed(2)} USDC`
+                pnlEl.classList.toggle("text-green-700", pnl >= 0)
+                pnlEl.classList.toggle("text-red-700", pnl < 0)
+            }
+            const feesEl = document.getElementById("metric-fees")
+            if (feesEl) {
+                const fees = metrics.fees_usdc || 0
+                feesEl.textContent = `${fees.toFixed(2)} USDC`
+                feesEl.classList.remove("text-green-700", "text-red-700")
+            }
+            const aprEl = document.getElementById("metric-apr")
+            if (aprEl) {
+                const apr = metrics.apr_percent || 0
+                aprEl.classList.toggle("text-red-700", apr < 0)
+            }
+            const historical = data.historical_metrics || {}
+            historicalCountValue = `${historical.count ?? 0}`
+            setText("historical-count", historicalCountValue)
+            const historicalPnl = historical.pnl_usdc || 0
+            setText("historical-pnl", `${historicalPnl.toFixed(2)} USDC`)
+            const historicalApr = historical.apr_percent || 0
+            setText("historical-apr", `${historicalApr.toFixed(2)}%`)
+            const historicalFees = historical.fees_usdc || 0
+            setText("historical-fees", `${historicalFees.toFixed(2)} USDC`)
+            const historicalPnlEl = document.getElementById("historical-pnl")
+            if (historicalPnlEl) {
+                historicalPnlEl.classList.toggle("text-green-700", historicalPnl >= 0)
+                historicalPnlEl.classList.toggle("text-red-700", historicalPnl < 0)
+            }
+            const historicalAprEl = document.getElementById("historical-apr")
+            if (historicalAprEl) {
+                historicalAprEl.classList.toggle("text-red-700", historicalApr < 0)
+            }
+            const historicalFeesEl = document.getElementById("historical-fees")
+            if (historicalFeesEl) {
+                historicalFeesEl.classList.remove("text-green-700", "text-red-700")
+            }
+            document.querySelectorAll(".loading-text").forEach((el) => el.classList.remove("loading-text"))
+            const selectedId = data.selected_strategy ? data.selected_strategy.id : null
+            renderChart({
+                prefix: "equity",
+                series: data.equity_series || [],
+                min: data.equity_min ?? 0,
+                max: data.equity_max ?? 0,
+                dates: data.equity_dates || [],
+                selectedId,
+            })
+            renderChart({
+                prefix: "historical-equity",
+                series: data.historical_series || [],
+                min: data.historical_min ?? 0,
+                max: data.historical_max ?? 0,
+                dates: data.historical_dates || [],
+                selectedId: null,
+            })
+            updateHeaderMetric()
+        })
+    const viewContainer = document.querySelector("[data-dashboard-views]")
+    if (viewContainer) {
+        const panels = Array.from(viewContainer.querySelectorAll("[data-view-panel]"))
+        const buttons = Array.from(document.querySelectorAll("[data-view-button]"))
+        const setView = (view) => {
+            activeView = view
+            panels.forEach((panel) => {
+                panel.classList.toggle("hidden", panel.getAttribute("data-view-panel") !== view)
+            })
+            buttons.forEach((button) => {
+                const isActive = button.getAttribute("data-view") === view
+                button.classList.toggle("font-semibold", isActive)
+                button.classList.toggle("bg-[#E7E1FF]", isActive)
+            })
+            updateHeaderMetric()
+        }
+        const defaultView = viewContainer.getAttribute("data-default-view") || "current"
+        setView(defaultView)
+        buttons.forEach((button) => {
+            button.addEventListener("click", () => setView(button.getAttribute("data-view")))
+        })
+    }
+</script>
+{% endblock %}
