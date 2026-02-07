@@ -1,12 +1,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
 
 # Crea il motore di connessione
-engine = create_async_engine(settings.DATABASE_URL, echo=False)
+database_url = make_url(settings.DATABASE_URL)
+if database_url.drivername in ("postgresql", "postgres"):
+    database_url = database_url.set(drivername="postgresql+asyncpg")
+engine = create_async_engine(database_url, echo=False)
 
 # Configura la sessione (lo strumento che useremo per fare query)
 AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
