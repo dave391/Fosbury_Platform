@@ -29,6 +29,8 @@ app.include_router(router)
 async def basic_auth_middleware(request: Request, call_next):
     if not settings.BASIC_AUTH_ENABLED:
         return await call_next(request)
+    if request.url.path == "/health":
+        return await call_next(request)
     auth_header = request.headers.get("authorization", "")
     if not auth_header.lower().startswith("basic "):
         return PlainTextResponse(
@@ -55,6 +57,11 @@ async def basic_auth_middleware(request: Request, call_next):
             headers={"WWW-Authenticate": "Basic"},
         )
     return await call_next(request)
+
+
+@app.get("/health")
+async def health_check():
+    return JSONResponse({"status": "ok"})
 
 
 @app.exception_handler(UnauthorizedHTML)

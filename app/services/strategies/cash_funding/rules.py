@@ -9,7 +9,7 @@ EXCHANGE_RULES = {
         "assets": ["BTC", "ETH", "PAXG", "SOL"],
         "quote": "USDC",
         "spot_asset_aliases": {"ETH": "STETH"},
-        "perp_size_mode": "auto",
+        "perp_size_mode": "base",
     },
     "bitmex": {
         "enabled": True,
