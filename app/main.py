@@ -7,9 +7,16 @@ from fastapi.staticfiles import StaticFiles
 from app.routers.shared import UnauthorizedAPI
 from app.routers.shared import UnauthorizedHTML
 from app.routes import router
+from core.config import settings
 
 
-app = FastAPI(title="Fosbury Platform")
+docs_enabled = settings.EXPOSE_DOCS
+app = FastAPI(
+    title="Fosbury Platform",
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
+)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(router)
 
