@@ -19,6 +19,15 @@ class StrategyService:
         self.strategy_registry = get_strategy_registry()
         self.default_strategy_key = DEFAULT_STRATEGY_KEY
 
+    async def get_connected_exchange_names(self, user_id: int) -> List[str]:
+        credentials = await self.exchange_service.get_configured_exchanges(user_id)
+        exchanges = []
+        for row in credentials:
+            name = row.get("exchange_name") if row else None
+            if name and name not in exchanges:
+                exchanges.append(name)
+        return exchanges
+
     async def get_active_strategies(self, user_id: int) -> List[Strategy]:
         result = await self.db.execute(
             select(Strategy)
@@ -184,14 +193,25 @@ class StrategyService:
 
         return {"rows": rows, "strategy_stats": strategy_stats}
 
-    async def get_strategy_page_data(self, user_id: int, exchange_name: str = ExchangeName.DERIBIT) -> Dict[str, Any]:
+    async def get_strategy_page_data(
+        self,
+        user_id: int,
+        exchange_name: str = ExchangeName.DERIBIT,
+        connected_exchanges: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """
         Prepares data for the strategy page, including active strategies and user balance.
         """
+        if isinstance(exchange_name, ExchangeName):
+            exchange_name = exchange_name.value
+        if connected_exchanges is None:
+            connected_exchanges = await self.get_connected_exchange_names(user_id)
+        if connected_exchanges and exchange_name not in connected_exchanges:
+            exchange_name = connected_exchanges[0]
         strategies = await self.get_active_strategies(user_id)
         
         usdc_balance = 0.0
-        has_credentials = False
+        has_credentials = bool(connected_exchanges)
         strategy_impl = self._get_strategy_impl()
         allowed_assets = strategy_impl.get_allowed_assets(exchange_name)
         min_capital_usd = strategy_impl.get_min_capital()
@@ -200,17 +220,17 @@ class StrategyService:
         except Exception:
             quote_currency = "USDC"
         
-        account = await self.exchange_service.get_default_exchange_account(user_id, exchange_name)
-        exchange = await self.exchange_service.get_exchange_client_by_account(account.id) if account else None
-        if exchange:
-            has_credentials = True
-            try:
-                adapter = self.exchange_service.get_exchange_adapter(exchange_name)
-                usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
-            except Exception:
-                pass
-            finally:
-                await exchange.close()
+        if connected_exchanges and exchange_name in connected_exchanges:
+            account = await self.exchange_service.get_default_exchange_account(user_id, exchange_name)
+            exchange = await self.exchange_service.get_exchange_client_by_account(account.id) if account else None
+            if exchange:
+                try:
+                    adapter = self.exchange_service.get_exchange_adapter(exchange_name)
+                    usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
+                except Exception:
+                    pass
+                finally:
+                    await exchange.close()
                 
         return {
             "user_id": user_id,

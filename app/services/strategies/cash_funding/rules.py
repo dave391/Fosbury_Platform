@@ -9,7 +9,7 @@ EXCHANGE_RULES = {
         "assets": ["BTC", "ETH", "PAXG", "SOL"],
         "quote": "USDC",
         "spot_asset_aliases": {"ETH": "STETH"},
-        "perp_size_mode": "auto",
+        "perp_size_mode": "base",
     },
     "bitmex": {
         "enabled": True,
@@ -26,3 +26,4 @@ def get_exchange_rules(exchange_id: str) -> dict:
     if not rules or not rules.get("enabled"):
         raise ValueError("Exchange non disponibile per questa strategia.")
     return rules
+#

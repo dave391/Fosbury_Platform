@@ -1,5 +1,9 @@
+import base64
+import secrets
+
 from fastapi import FastAPI
 from fastapi import Request
+from fastapi.responses import PlainTextResponse
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +23,45 @@ app = FastAPI(
 )
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(router)
+
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    if not settings.BASIC_AUTH_ENABLED:
+        return await call_next(request)
+    if request.url.path == "/health":
+        return await call_next(request)
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("basic "):
+        return PlainTextResponse(
+            "Unauthorized",
+            status_code=401,
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    token = auth_header.split(" ", 1)[1].strip()
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+        username, password = decoded.split(":", 1)
+    except Exception:
+        return PlainTextResponse(
+            "Unauthorized",
+            status_code=401,
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    valid_user = secrets.compare_digest(username, settings.BASIC_AUTH_USERNAME)
+    valid_pass = secrets.compare_digest(password, settings.BASIC_AUTH_PASSWORD)
+    if not (valid_user and valid_pass):
+        return PlainTextResponse(
+            "Unauthorized",
+            status_code=401,
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return await call_next(request)
+
+
+@app.get("/health")
+async def health_check():
+    return JSONResponse({"status": "ok"})
 
 
 @app.exception_handler(UnauthorizedHTML)
