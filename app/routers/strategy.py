@@ -26,6 +26,12 @@ async def render_strategy_page(
     success: bool = None,
     exchange_name: str = ExchangeName.DERIBIT,
 ):
+    if isinstance(exchange_name, ExchangeName):
+        exchange_name = exchange_name.value
+    connected_exchanges = await service.get_connected_exchange_names(user_id)
+    if connected_exchanges and exchange_name not in connected_exchanges:
+        exchange_name = connected_exchanges[0]
+    exchanges = connected_exchanges if connected_exchanges else [e.value for e in ExchangeName]
     strategies = await service.get_active_strategies(user_id)
     active_count = len(strategies)
     total_allocated = sum(strategy.allocated_capital_usdc for strategy in strategies)
@@ -46,7 +52,7 @@ async def render_strategy_page(
             "usdc_balance": 0.0,
             "has_credentials": None,
             "exchange_name": exchange_name,
-            "exchanges": [e.value for e in ExchangeName],
+            "exchanges": exchanges,
             "quote_currency": quote_currency,
         },
     )
@@ -70,8 +76,17 @@ async def strategy_data(
     db: AsyncSession = Depends(get_db),
 ):
     service = StrategyService(db)
-    exchange_name = request.query_params.get("exchange_name") or ExchangeName.DERIBIT
-    data = await service.get_strategy_page_data(user_id, exchange_name)
+    connected_exchanges = await service.get_connected_exchange_names(user_id)
+    exchange_name = request.query_params.get("exchange_name") or (
+        connected_exchanges[0] if connected_exchanges else ExchangeName.DERIBIT
+    )
+    if isinstance(exchange_name, ExchangeName):
+        exchange_name = exchange_name.value
+    if connected_exchanges and exchange_name not in connected_exchanges:
+        exchange_name = connected_exchanges[0]
+    data = await service.get_strategy_page_data(
+        user_id, exchange_name, connected_exchanges=connected_exchanges
+    )
     strategies = data.get("strategies") or []
     rows_data = await service.build_active_strategy_rows(user_id, strategies)
     rows = rows_data.get("rows", [])

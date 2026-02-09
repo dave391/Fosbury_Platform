@@ -26,3 +26,4 @@ def get_exchange_rules(exchange_id: str) -> dict:
     if not rules or not rules.get("enabled"):
         raise ValueError("Exchange non disponibile per questa strategia.")
     return rules
+#

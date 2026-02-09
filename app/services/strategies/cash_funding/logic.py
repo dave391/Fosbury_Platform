@@ -430,8 +430,28 @@ async def stop(db, exchange, strategy: Strategy) -> float:
         strategy.allocated_capital_usdc = 0.0
         strategy.total_quantity = 0.0
         return 0.0
-    perp_order = await exchange.create_market_buy_order(perp_symbol, perp_qty)
-    spot_order = await exchange.create_market_sell_order(spot_symbol, spot_qty)
+    logger.info(
+        "stop_strategy asset=%s spot=%s perp=%s spot_qty=%.8f perp_qty=%.8f perp_price=%.8f",
+        asset,
+        spot_symbol,
+        perp_symbol,
+        spot_qty,
+        perp_qty,
+        perp_price,
+    )
+    try:
+        perp_order = await exchange.create_market_buy_order(perp_symbol, perp_qty)
+        spot_order = await exchange.create_market_sell_order(spot_symbol, spot_qty)
+    except Exception:
+        logger.exception(
+            "stop_strategy_failed asset=%s spot=%s perp=%s spot_qty=%.8f perp_qty=%.8f",
+            asset,
+            spot_symbol,
+            perp_symbol,
+            spot_qty,
+            perp_qty,
+        )
+        raise
     exit_perp_px = float(perp_order.get("average") or perp_price)
     exit_spot_px = float(spot_order.get("average") or await get_last_price(exchange, spot_symbol))
     entry_spot_px = strategy.entry_spot_px or exit_spot_px
