@@ -202,6 +202,92 @@ body {
   background: var(--danger-bg);
 }
 
+.mobile-nav {
+  border-bottom: 2px solid #000;
+}
+
+.mobile-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  border-bottom: 2px solid #000;
+}
+
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.mobile-logo {
+  width: clamp(1.4rem, 6vw, 1.8rem);
+  height: clamp(1.4rem, 6vw, 1.8rem);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.mobile-title {
+  font-weight: 600;
+  font-size: clamp(0.7rem, 3.5vw, 0.9rem);
+  white-space: nowrap;
+}
+
+.mobile-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.mobile-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 2px solid #000;
+  padding: 0.3rem 0.45rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.mobile-menu-panel {
+  border-bottom: 2px solid #000;
+  display: none;
+}
+
+.mobile-menu-panel .sidebar-nav {
+  padding: 0.6rem 0.9rem;
+}
+
+.mobile-toggle-input:checked ~ .mobile-topbar .mobile-toggle {
+  background: var(--accent);
+}
+
+.mobile-toggle-input:checked ~ .mobile-menu-panel {
+  display: block;
+}
+
+.mobile-burger {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.mobile-burger-line {
+  width: 1.05rem;
+  height: 2px;
+  background: #000;
+  display: block;
+}
+
 .page-header {
   border: 2px solid #000;
   padding: 1rem;

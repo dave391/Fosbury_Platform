@@ -3,7 +3,7 @@
 
 {% block body %}
 <div class="min-h-screen">
-    <div class="flex min-h-screen">
+    <div class="flex min-h-screen flex-col md:flex-row">
         {{ sidebar("dashboard") }}
 
         <main class="flex-1 p-4">
@@ -566,22 +566,7 @@
             svg.addEventListener("mouseleave", hideTooltip)
         }
     }
-    const headerLabelEl = document.getElementById("metric-header-label")
-    const headerValueEl = document.getElementById("metric-current")
-    let totalBalanceValue = null
-    let historicalCountValue = null
     let activeView = "current"
-    const updateHeaderMetric = () => {
-        if (!headerLabelEl || !headerValueEl) return
-        if (activeView === "historical") {
-            headerLabelEl.textContent = "Closed strategy"
-            headerValueEl.textContent = historicalCountValue ?? "Loading"
-            headerValueEl.classList.add("num")
-        } else {
-            headerLabelEl.textContent = "Total Balance"
-            headerValueEl.textContent = totalBalanceValue ?? "Loading"
-        }
-    }
     setupClosedTableSorting()
     fetch(url)
         .then((res) => res.json())
@@ -594,8 +579,6 @@
             }
             const totalBalance = data.total_balance_usdc ?? metrics.current_capital_usdc ?? 0
             const currentBalance = data.current_balance_usdc ?? metrics.current_capital_usdc ?? 0
-            totalBalanceValue = `${totalBalance.toFixed(2)} USDC`
-            setText("metric-current", totalBalanceValue)
             setText("metric-current-card", `${currentBalance.toFixed(2)} USDC`)
             setText("metric-apr", `${(metrics.apr_percent || 0).toFixed(2)}%`)
             const pnlEl = document.getElementById("metric-pnl")
@@ -617,8 +600,7 @@
                 aprEl.classList.toggle("text-red-700", apr < 0)
             }
             const historical = data.historical_metrics || {}
-            historicalCountValue = `${historical.count ?? 0}`
-            setText("historical-count", historicalCountValue)
+            setText("historical-count", `${historical.count ?? 0}`)
             const historicalPnl = historical.pnl_usdc || 0
             setText("historical-pnl", `${historicalPnl.toFixed(2)} USDC`)
             const historicalApr = historical.apr_percent || 0
@@ -656,7 +638,6 @@
                 dates: data.historical_dates || [],
                 selectedId: null,
             })
-            updateHeaderMetric()
         })
     const viewContainer = document.querySelector("[data-dashboard-views]")
     if (viewContainer) {
@@ -672,7 +653,6 @@
                 button.classList.toggle("font-semibold", isActive)
                 button.classList.toggle("bg-[#E7E1FF]", isActive)
             })
-            updateHeaderMetric()
         }
         const defaultView = viewContainer.getAttribute("data-default-view") || "current"
         setView(defaultView)

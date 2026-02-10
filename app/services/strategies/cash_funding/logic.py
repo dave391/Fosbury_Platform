@@ -309,6 +309,7 @@ async def start(
     spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount)
     filled = float(spot_order.get("filled") or spot_order.get("amount") or spot_amount)
     entry_spot_px = float(spot_order.get("average") or spot_price)
+    real_capital_usdc = float(spot_order.get("cost") or (entry_spot_px * filled))
     try:
         perp_price = await get_last_price(exchange, perp_symbol)
         perp_amount = perp_amount_to_precision(exchange, perp_symbol, config, filled, perp_price)
@@ -324,7 +325,7 @@ async def start(
         strategy_key=strategy_key,
         name=STRATEGY_NAME,
         status=StrategyStatus.ACTIVE,
-        allocated_capital_usdc=capital_usdc,
+        allocated_capital_usdc=real_capital_usdc,
         total_quantity=filled,
         entry_spot_px=entry_spot_px,
         entry_perp_px=entry_perp_px,
@@ -334,7 +335,7 @@ async def start(
     await db.flush()
     position = StrategyPosition(
         strategy_id=strategy.id,
-        allocated_capital_usdc=capital_usdc,
+        allocated_capital_usdc=real_capital_usdc,
         quantity=filled,
         entry_spot_px=entry_spot_px,
         entry_perp_px=entry_perp_px,
@@ -363,6 +364,7 @@ async def add(db, exchange, strategy: Strategy, added_amount_usdc: float) -> Str
     spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount)
     filled = float(spot_order.get("filled") or spot_order.get("amount") or spot_amount)
     entry_spot_px = float(spot_order.get("average") or spot_price)
+    real_capital_usdc = float(spot_order.get("cost") or (entry_spot_px * filled))
     try:
         perp_price = await get_last_price(exchange, perp_symbol)
         perp_amount = perp_amount_to_precision(exchange, perp_symbol, config, filled, perp_price)
@@ -373,12 +375,12 @@ async def add(db, exchange, strategy: Strategy, added_amount_usdc: float) -> Str
     entry_perp_px = float(perp_order.get("average") or perp_price)
     prev_qty = strategy.total_quantity or 0.0
     strategy.total_quantity = prev_qty + filled
-    strategy.allocated_capital_usdc += added_amount_usdc
+    strategy.allocated_capital_usdc += real_capital_usdc
     strategy.entry_spot_px = weighted_avg(strategy.entry_spot_px, prev_qty, entry_spot_px, filled)
     strategy.entry_perp_px = weighted_avg(strategy.entry_perp_px, prev_qty, entry_perp_px, filled)
     position = StrategyPosition(
         strategy_id=strategy.id,
-        allocated_capital_usdc=added_amount_usdc,
+        allocated_capital_usdc=real_capital_usdc,
         quantity=filled,
         entry_spot_px=entry_spot_px,
         entry_perp_px=entry_perp_px,
@@ -406,9 +408,15 @@ async def remove(db, exchange, strategy: Strategy, remove_amount_usdc: float) ->
         spot_qty = strategy.total_quantity
     perp_qty = perp_amount_to_precision(exchange, perp_symbol, config, spot_qty, perp_price)
     await exchange.create_market_buy_order(perp_symbol, perp_qty)
-    await exchange.create_market_sell_order(spot_symbol, spot_qty)
+    spot_order = await exchange.create_market_sell_order(spot_symbol, spot_qty)
+    removed_cost = spot_order.get("cost")
+    removed_real_capital = (
+        float(removed_cost)
+        if removed_cost is not None
+        else (strategy.entry_spot_px or spot_price) * spot_qty
+    )
     strategy.total_quantity = max(0.0, (strategy.total_quantity or 0.0) - spot_qty)
-    strategy.allocated_capital_usdc = max(0.0, strategy.allocated_capital_usdc - remove_amount_usdc)
+    strategy.allocated_capital_usdc = max(0.0, strategy.allocated_capital_usdc - removed_real_capital)
     if strategy.total_quantity <= 0:
         strategy.status = StrategyStatus.CLOSED
     return spot_qty

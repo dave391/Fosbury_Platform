@@ -3,7 +3,7 @@
 
 {% block body %}
 <div class="min-h-screen">
-    <div class="flex min-h-screen">
+    <div class="flex min-h-screen flex-col md:flex-row">
         {{ sidebar("strategy") }}
 
         <main class="flex-1 p-4">
@@ -437,9 +437,6 @@
         })
         const rows = Array.isArray(data.active_strategies) ? data.active_strategies : []
         const activeCount = Number.isFinite(Number(data.active_count)) ? Number(data.active_count) : rows.length
-        const totalAllocated = rows.reduce((sum, row) => sum + Number(row.current_capital_usdc || 0), 0)
-        const totalEl = document.getElementById("strategy-total-allocated")
-        if (totalEl) totalEl.textContent = `${formatNumber(totalAllocated)} USD`
         const countEl = document.getElementById("strategy-active-count")
         if (countEl) countEl.textContent = `${activeCount}`
         renderActiveStrategies(rows)
