@@ -45,27 +45,20 @@ async def dashboard_data(
     service = DashboardService(db)
     data = await service.get_dashboard_data(user_id, strategy_id)
     selected_strategy = data.get("selected_strategy")
-    equity_snapshots = data.get("equity_snapshots") or []
-    has_snapshots = len(equity_snapshots) > 0
-
     return JSONResponse(
         {
             "metrics": data.get("metrics"),
             "total_balance_usdc": data.get("total_balance_usdc"),
             "current_balance_usdc": data.get("current_balance_usdc"),
-            "equity_chart": data.get("equity_chart"),
             "equity_series": data.get("equity_series"),
             "equity_min": data.get("equity_min"),
             "equity_max": data.get("equity_max"),
             "equity_dates": data.get("equity_dates"),
-            "has_snapshots": has_snapshots,
             "historical_metrics": data.get("historical_metrics"),
             "historical_series": data.get("historical_series"),
             "historical_min": data.get("historical_min"),
             "historical_max": data.get("historical_max"),
             "historical_dates": data.get("historical_dates"),
-            "funding_rows": data.get("funding_rows"),
-            "fee_rows": data.get("fee_rows"),
             "selected_strategy": {
                 "id": selected_strategy.id,
                 "asset": selected_strategy.asset,

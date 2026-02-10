@@ -90,7 +90,6 @@ async def strategy_data(
     strategies = data.get("strategies") or []
     rows_data = await service.build_active_strategy_rows(user_id, strategies)
     rows = rows_data.get("rows", [])
-    total_allocated = sum(row.get("allocated_capital_usdc", 0.0) for row in rows) if rows else 0.0
     return JSONResponse(
         {
             "usdc_balance": data.get("usdc_balance", 0.0),
@@ -101,7 +100,6 @@ async def strategy_data(
             "quote_currency": data.get("quote_currency"),
             "active_strategies": rows,
             "active_count": len(rows),
-            "total_allocated_usdc": total_allocated,
         }
     )
 
