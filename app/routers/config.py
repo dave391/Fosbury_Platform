@@ -63,7 +63,7 @@ async def save_config(
         msg = str(e)
         success = False
     except Exception:
-        msg = "Errore salvataggio credenziali."
+        msg = "Error saving credentials."
         success = False
 
     return templates.TemplateResponse(

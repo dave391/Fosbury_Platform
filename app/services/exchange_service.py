@@ -15,7 +15,7 @@ class ExchangeService:
     def _get_exchange_adapter(self, exchange_name: str):
         adapter = self.exchange_registry.get(exchange_name)
         if not adapter:
-            raise ValueError(f"Exchange {exchange_name} non supportato")
+            raise ValueError(f"Exchange {exchange_name} not supported")
         return adapter
 
     def get_exchange_adapter(self, exchange_name: str = ExchangeName.DERIBIT):
@@ -121,11 +121,32 @@ class ExchangeService:
         return credentials_list
 
     async def save_credentials(self, user_id: int, api_key: str, api_secret: str, exchange_name: str = ExchangeName.DERIBIT) -> None:
+        existing_result = await self.db.execute(
+            select(ExchangeCredentials)
+            .where(
+                ExchangeCredentials.user_id == user_id,
+                ExchangeCredentials.exchange_name == exchange_name,
+                ExchangeCredentials.disabled_at.is_(None),
+            )
+            .order_by(ExchangeCredentials.created_at.desc())
+        )
+        for row in existing_result.scalars().all():
+            try:
+                existing_key = decrypt_data(row.encrypted_futures_api_key) if row.encrypted_futures_api_key else ""
+            except Exception:
+                existing_key = ""
+            try:
+                existing_secret = decrypt_data(row.encrypted_futures_api_secret) if row.encrypted_futures_api_secret else ""
+            except Exception:
+                existing_secret = ""
+            if existing_key and existing_secret and existing_key == api_key and existing_secret == api_secret:
+                raise ValueError("Keys already connected.")
+
         try:
             adapter = self._get_exchange_adapter(exchange_name)
             await adapter.validate_credentials(api_key, api_secret)
         except Exception as e:
-            raise ValueError(f"Errore validazione credenziali: {e}")
+            raise ValueError(f"Credential validation error: {e}")
         
         account = await self.get_or_create_default_exchange_account(user_id, exchange_name)
         credentials = ExchangeCredentials(
