@@ -121,7 +121,7 @@ async def start_strategy(
         return await render_strategy_page(request, service, user_id, str(e), False, exchange_name=exchange_name)
     except Exception:
         return await render_strategy_page(
-            request, service, user_id, "Errore avvio strategia.", False, exchange_name=exchange_name
+            request, service, user_id, "Error starting strategy.", False, exchange_name=exchange_name
         )
 
 
@@ -140,7 +140,7 @@ async def add_strategy_capital(
     except ValueError as e:
         return await render_strategy_page(request, service, user_id, str(e), False)
     except Exception:
-        return await render_strategy_page(request, service, user_id, "Errore aggiunta capitale.", False)
+        return await render_strategy_page(request, service, user_id, "Error adding capital.", False)
 
 
 @router.post("/strategy/remove")
@@ -158,7 +158,7 @@ async def remove_strategy_capital(
     except ValueError as e:
         return await render_strategy_page(request, service, user_id, str(e), False)
     except Exception:
-        return await render_strategy_page(request, service, user_id, "Errore rimozione capitale.", False)
+        return await render_strategy_page(request, service, user_id, "Error removing capital.", False)
 
 
 @router.post("/strategy/stop")
@@ -175,4 +175,4 @@ async def stop_strategy(
     except ValueError as e:
         return await render_strategy_page(request, service, user_id, str(e), False)
     except Exception:
-        return await render_strategy_page(request, service, user_id, "Errore stop strategia.", False)
+        return await render_strategy_page(request, service, user_id, "Error stopping strategy.", False)

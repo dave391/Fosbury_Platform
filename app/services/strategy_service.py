@@ -246,27 +246,27 @@ class StrategyService:
     async def _get_exchange_or_raise(self, exchange_account_id: int):
         exchange = await self.exchange_service.get_exchange_client_by_account(exchange_account_id)
         if not exchange:
-            raise ValueError("Credenziali exchange mancanti.")
+            raise ValueError("Exchange credentials missing.")
         return exchange
 
     def _get_strategy_impl(self):
         strategy_impl = self.strategy_registry.get(self.default_strategy_key)
         if not strategy_impl:
-            raise ValueError("Strategia non disponibile.")
+            raise ValueError("Strategy not available.")
         return strategy_impl
 
     async def start_strategy(self, user_id: int, asset: str, capital_usdc: float, exchange_name: str = ExchangeName.DERIBIT) -> Strategy:
         strategy_impl = self._get_strategy_impl()
         allowed_assets = strategy_impl.get_allowed_assets(exchange_name)
         if allowed_assets and asset not in allowed_assets:
-            raise ValueError(f"Asset non valido. Assets supportati: {', '.join(allowed_assets)}")
+            raise ValueError(f"Invalid asset. Supported assets: {', '.join(allowed_assets)}")
         min_capital_usd = strategy_impl.get_min_capital()
         if capital_usdc < min_capital_usd:
             raise ValueError(f"Minimum capital is {min_capital_usd} USD.")
 
         account = await self.exchange_service.get_default_exchange_account(user_id, exchange_name)
         if not account:
-            raise ValueError("Credenziali exchange mancanti.")
+            raise ValueError("Exchange credentials missing.")
 
         # Check if strategy already exists
         result = await self.db.execute(
@@ -277,7 +277,7 @@ class StrategyService:
             )
         )
         if result.scalars().first():
-            raise ValueError("Strategia già attiva per questo asset.")
+            raise ValueError("Strategy already active for this asset.")
 
         exchange = await self._get_exchange_or_raise(account.id)
 
@@ -285,7 +285,7 @@ class StrategyService:
             adapter = self.exchange_service.get_exchange_adapter(account.exchange_name)
             usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
             if capital_usdc > usdc_balance:
-                raise ValueError(f"Saldo USDC insufficiente. Disponibile: {usdc_balance}, Richiesto: {capital_usdc}")
+                raise ValueError(f"Insufficient USDC balance. Available: {usdc_balance}, Required: {capital_usdc}")
 
             strategy = await strategy_impl.start(self.db, exchange, user_id, account.id, asset, capital_usdc)
             await self.db.commit()
@@ -298,11 +298,11 @@ class StrategyService:
 
     async def add_capital(self, user_id: int, strategy_id: int, added_amount_usdc: float) -> Strategy:
         if added_amount_usdc < MIN_ADD_CAPITAL_USDC:
-            raise ValueError(f"Importo minimo {MIN_ADD_CAPITAL_USDC} USDC.")
+            raise ValueError(f"Minimum amount is {MIN_ADD_CAPITAL_USDC} USDC.")
 
         strategy = await self.get_strategy_by_id(user_id, strategy_id)
         if not strategy:
-            raise ValueError("Strategia non trovata.")
+            raise ValueError("Strategy not found.")
 
         exchange = await self._get_exchange_or_raise(strategy.exchange_account_id)
 
@@ -311,7 +311,7 @@ class StrategyService:
             strategy_impl = self._get_strategy_impl()
             usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
             if added_amount_usdc > usdc_balance:
-                raise ValueError(f"Saldo USDC insufficiente. Disponibile: {usdc_balance}, Richiesto: {added_amount_usdc}")
+                raise ValueError(f"Insufficient USDC balance. Available: {usdc_balance}, Required: {added_amount_usdc}")
 
             await strategy_impl.add(self.db, exchange, strategy, added_amount_usdc)
             await self.db.commit()
@@ -324,11 +324,11 @@ class StrategyService:
 
     async def remove_capital(self, user_id: int, strategy_id: int, remove_amount_usdc: float) -> float:
         if remove_amount_usdc < MIN_REMOVE_CAPITAL_USDC:
-            raise ValueError(f"Importo minimo {MIN_REMOVE_CAPITAL_USDC} USDC.")
+            raise ValueError(f"Minimum amount is {MIN_REMOVE_CAPITAL_USDC} USDC.")
 
         strategy = await self.get_strategy_by_id(user_id, strategy_id)
         if not strategy:
-            raise ValueError("Strategia non trovata.")
+            raise ValueError("Strategy not found.")
 
         exchange = await self._get_exchange_or_raise(strategy.exchange_account_id)
 
@@ -352,7 +352,7 @@ class StrategyService:
     async def stop_strategy(self, user_id: int, strategy_id: int) -> float:
         strategy = await self.get_strategy_by_id(user_id, strategy_id)
         if not strategy:
-            raise ValueError("Strategia non trovata.")
+            raise ValueError("Strategy not found.")
 
         exchange = await self._get_exchange_or_raise(strategy.exchange_account_id)
 
