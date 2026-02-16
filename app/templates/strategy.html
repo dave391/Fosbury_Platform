@@ -1,125 +1,174 @@
 {% extends "base.html" %}
-{% from "sidebar.html" import sidebar %}
 
-{% block body %}
-<div class="min-h-screen">
-    <div class="flex min-h-screen flex-col md:flex-row">
-        {{ sidebar("strategy") }}
-
-        <main class="flex-1 p-4">
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
-                <div class="border-2 border-black p-4 lg:col-span-8">
-                    <h2 class="text-lg font-semibold uppercase tracking-wider">Strategy</h2>
-                </div>
-                <div class="panel-secondary p-4 lg:col-span-4">
-                    <div class="ops-summary">
-                        <div class="ops-summary-row">
-                            <span>Active strategies</span>
-                            <span class="font-semibold loading-text" id="strategy-active-count">Loading</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-4">
-                <div class="inline-flex border-2 border-black bg-[#F5F5F0] text-xs uppercase tracking-wider" data-view-toggle>
-                    <button type="button" class="px-3 py-2 font-semibold bg-[#E7E1FF]" data-view-button data-view="start">[ Start New ]</button>
-                    <button type="button" class="px-3 py-2" data-view-button data-view="active">[ Manage Active ]</button>
-                </div>
-            </div>
-
-            {% if msg %}
-            <div class="mt-4 border-2 border-black p-3 text-xs uppercase tracking-wider {% if success %}bg-green-100 text-green-900{% else %}bg-red-100 text-red-900{% endif %}">
-                {{ msg }}
-            </div>
-            {% endif %}
-
-            <div class="mt-4" data-strategy-views data-default-view="{{ 'active' if has_strategies else 'start' }}">
-                <div data-view-panel="start">
-                    <div class="mb-3 text-base font-semibold uppercase tracking-wider">Start new strategy</div>
-                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                        <div class="border-2 border-black p-4">
-                            <div class="flex items-center justify-between">
-                                <h3 class="text-sm font-semibold uppercase tracking-wider">Cash and Funding</h3>
-                            </div>
-                            <div class="mt-3 grid grid-cols-3 gap-2 text-[0.6rem] uppercase tracking-wider" data-wizard-steps>
-                                <div class="flex items-center gap-2">
-                                    <span class="flex h-6 w-6 items-center justify-center border-2 border-black bg-[#E7E1FF] font-semibold" data-wizard-dot="1">1</span>
-                                    <span class="font-semibold">Strategy</span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="flex h-6 w-6 items-center justify-center border-2 border-black" data-wizard-dot="2">2</span>
-                                    <span>Exchange</span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="flex h-6 w-6 items-center justify-center border-2 border-black" data-wizard-dot="3">3</span>
-                                    <span>Capital</span>
-                                </div>
-                            </div>
-                            <p class="mt-3 text-sm font-editorial loading-text" id="strategy-loading">Loading</p>
-                            <p class="mt-3 hidden text-sm font-editorial text-red-700" id="strategy-no-credentials">Connect exchange credentials in Exchanges.</p>
-                            <form action="/strategy/start" method="post" class="mt-3 hidden space-y-4" id="strategy-form" data-submit-feedback data-strategy-wizard data-confirm-form data-confirm-action="start" data-strategy-name="Cash and Funding">
-                                <div class="space-y-3" data-wizard-step="1">
-                                    <div class="panel-secondary p-3">
-                                        <div class="text-xs uppercase tracking-wider">Strategy</div>
-                                        <div class="mt-2 text-sm font-semibold uppercase tracking-wider">Cash and Funding</div>
-                                        <div class="mt-2 text-sm font-editorial">Single-asset funding strategy with automatic allocation.</div>
-                                    </div>
-                                </div>
-                                <div class="space-y-3 hidden" data-wizard-step="2">
-                                    <div>
-                                        <label class="block text-xs uppercase tracking-wider">Exchange</label>
-                                        <select name="exchange_name" id="strategy-exchange-select" class="mt-1 block w-full border-2 border-black bg-transparent px-2 py-1 text-sm focus:outline-none" required>
-                                            {% for ex in exchanges %}
-                                            <option value="{{ ex }}" {% if exchange_name == ex %}selected{% endif %}>{{ ex|upper }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs uppercase tracking-wider">Asset</label>
-                                        <select name="asset" class="mt-1 block w-full border-2 border-black bg-transparent px-2 py-1 text-sm focus:outline-none" required data-asset-select>
-                                            <option value="" selected disabled>--</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="space-y-3 hidden" data-wizard-step="3">
-                                    <div data-max-wrapper>
-                                        <label class="block text-xs uppercase tracking-wider">Capital to allocate (<span data-quote-currency>{{ quote_currency }}</span>)</label>
-                                        <div class="mt-1 flex items-center justify-between text-xs uppercase tracking-wider">
-                                            <span>Available: <span data-usdc-balance>{{ usdc_balance }}</span> <span data-quote-currency>{{ quote_currency }}</span></span>
-                                        </div>
-                                        <div class="mt-2 flex items-center gap-2">
-                                            <input type="number" name="capital_usdc" max="{{ usdc_balance }}" step="1" required data-usdc-max data-max-input data-min-capital-input
-                                                   class="block w-full max-w-[240px] border-2 border-black bg-transparent px-2 py-1 text-sm focus:outline-none">
-                                            <button type="button" class="btn-secondary bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-max-button>[ Max ]</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="flex items-center justify-between gap-3 pt-2">
-                                    <button type="button" class="border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-wizard-back>[ Back ]</button>
-                                    <div class="flex items-center gap-3">
-                                        <button type="button" class="btn-secondary bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-wizard-next>[ Next ]</button>
-                                        <button type="submit" class="btn-primary border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-wizard-submit>[ Start ]</button>
-                                        <span class="hidden text-xs uppercase tracking-wider" data-submit-status></span>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <div data-view-panel="active">
-                    <div class="mb-3 text-base font-semibold uppercase tracking-wider">Active Strategies</div>
-                    <div class="text-sm font-editorial loading-text" id="strategy-active-loading">Loading</div>
-                    <div class="mt-3 hidden text-sm font-editorial" id="strategy-active-empty">No active strategies.</div>
-                    <div class="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-2" id="strategy-active-list"></div>
-                </div>
-            </div>
-        </main>
+{% block content %}
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div>
+        <h2 class="text-2xl font-bold">Strategy</h2>
+        <div class="text-white/50">Choose your approach</div>
     </div>
 </div>
+
+{% if msg %}
+<div class="mt-4 alert {% if success %}alert-success{% else %}alert-danger{% endif %}">
+    {{ msg }}
+</div>
+{% endif %}
+
+<div class="mt-4">
+    <div class="mb-3 section-title">Start new strategy</div>
+    <p class="mt-3 text-sm font-editorial loading-text" id="strategy-loading">Loading</p>
+    <p class="mt-3 hidden text-sm font-editorial text-red-700" id="strategy-no-credentials">Connect exchange credentials in Exchanges.</p>
+    <form action="/strategy/start" method="post" class="mt-3 hidden" id="strategy-form" data-submit-feedback data-strategy-wizard data-confirm-form data-confirm-action="start" data-strategy-name="Cash and Funding">
+        <div class="wizard-shell">
+            <div class="card-surface p-4">
+                <div data-wizard-step="1" class="wizard-step">
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 wizard-step-grid">
+                        <div class="space-y-3 wizard-step-stack">
+                            <div class="text-xs uppercase tracking-wider text-white/60">Select strategy</div>
+                            <div class="strategy-card-list">
+                                <button type="button" class="strategy-select-card strategy-select-card-active" data-strategy-card data-strategy-name="Cash and Funding" data-strategy-apy="8-10% APY" data-strategy-desc="Single-asset funding strategy with automatic allocation.">
+                                    <span class="strategy-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </span>
+                                    <span class="flex-1 text-left">
+                                        <span class="block text-[0.6rem] uppercase tracking-wider text-white/60">Cash &amp; Funding</span>
+                                        <span class="block text-sm font-semibold">Cash and Funding</span>
+                                        <span class="mt-1 block text-xs text-white/60">Single-asset funding strategy with automatic allocation.</span>
+                                    </span>
+                                    <span class="strategy-apy">8-10% APY</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-surface p-4 wizard-panel">
+                            <div class="text-xs uppercase tracking-wider text-white/60">Strategy profile</div>
+                            <div class="mt-3 radar-chart">
+                                <svg viewBox="0 0 200 200" class="radar-chart-svg">
+                                    <g class="radar-grid">
+                                        <polygon points="100,30 166.6,78.4 141.1,156.6 58.9,156.6 33.4,78.4"></polygon>
+                                        <polygon points="100,45 152.3,82.7 132.4,144.5 67.6,144.5 47.7,82.7"></polygon>
+                                        <polygon points="100,60 138.0,87.6 123.5,132.4 76.5,132.4 62.0,87.6"></polygon>
+                                        <polygon points="100,75 123.8,92.3 114.7,120.2 85.3,120.2 76.2,92.3"></polygon>
+                                        <line x1="100" y1="100" x2="100" y2="30"></line>
+                                        <line x1="100" y1="100" x2="166.6" y2="78.4"></line>
+                                        <line x1="100" y1="100" x2="141.1" y2="156.6"></line>
+                                        <line x1="100" y1="100" x2="58.9" y2="156.6"></line>
+                                        <line x1="100" y1="100" x2="33.4" y2="78.4"></line>
+                                    </g>
+                                    <polygon class="radar-area" points="100,42 152,82 132,136 72,138 55,86"></polygon>
+                                    <g class="radar-labels">
+                                        <text x="100" y="6" text-anchor="middle">Yield</text>
+                                        <text x="194" y="66" text-anchor="end">Safety</text>
+                                        <text x="184" y="190" text-anchor="end">Neutrality</text>
+                                        <text x="16" y="190" text-anchor="start">Liquidity</text>
+                                        <text x="6" y="66" text-anchor="start">Volatility</text>
+                                    </g>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div data-wizard-step="2" class="wizard-step hidden">
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 wizard-step-grid">
+                        <div class="space-y-3 wizard-step-stack">
+                            <div>
+                                <label class="block text-xs uppercase tracking-wider">Exchange</label>
+                                <select name="exchange_name" id="strategy-exchange-select" class="mt-1 block w-full input" required>
+                                    {% for ex in exchanges %}
+                                    <option value="{{ ex }}" {% if exchange_name == ex %}selected{% endif %}>{{ ex|upper }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase tracking-wider">Trading Pair</label>
+                                <select name="asset" class="mt-1 block w-full input" required data-asset-select>
+                                    <option value="" selected disabled>--</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-surface p-4 wizard-panel">
+                            <div class="text-xs uppercase tracking-wider text-white/60">Estimated performance (12 months)</div>
+                            <div class="mt-3 line-chart">
+                                <svg viewBox="0 0 320 160" class="line-chart-svg">
+                                    <defs>
+                                        <linearGradient id="line-chart-gradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="rgba(131, 91, 254, 0.55)"/>
+                                            <stop offset="100%" stop-color="rgba(131, 91, 254, 0)"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <path class="line-chart-fill" d="M20 130 L40 120 L80 95 L120 80 L160 70 L200 58 L240 48 L280 35 L300 25 L300 150 L20 150 Z"></path>
+                                    <path class="line-chart-line" d="M20 130 L40 120 L80 95 L120 80 L160 70 L200 58 L240 48 L280 35 L300 25"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div data-wizard-step="3" class="wizard-step hidden">
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 wizard-step-grid">
+                        <div class="space-y-4 wizard-step-stack">
+                            <div>
+                                <label class="block text-xs uppercase tracking-wider">Capital to deploy (<span data-quote-currency>{{ quote_currency }}</span>)</label>
+                                <div class="mt-2 capital-input" data-max-wrapper>
+                                    <span class="capital-prefix">$</span>
+                                    <input type="number" name="capital_usdc" max="{{ usdc_balance }}" step="1" required data-usdc-max data-max-input data-min-capital-input data-capital-input class="capital-field">
+                                    <button type="button" class="btn-inline btn-secondary" data-max-button>Max</button>
+                                </div>
+                                <div class="mt-2 text-xs uppercase tracking-wider text-white/60">
+                                    Available: <span data-usdc-balance>{{ usdc_balance }}</span> <span data-quote-currency>{{ quote_currency }}</span>
+                                </div>
+                            </div>
+                            <div class="card-surface p-4">
+                                <div class="text-xs uppercase tracking-wider text-white/60">Summary</div>
+                                <div class="mt-3 space-y-2 text-xs uppercase tracking-wider">
+                                    <div class="flex items-center justify-between">
+                                        <span>Strategy</span>
+                                        <span data-summary-strategy>Cash and Funding</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span>Exchange</span>
+                                        <span data-summary-exchange>--</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span>Pair</span>
+                                        <span data-summary-pair>--</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span>Est. APY</span>
+                                        <span class="text-[#b59bff]" data-summary-apy>8-10% APY</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-surface p-4 wizard-panel flex items-center justify-center">
+                            <div class="allocation-donut" data-allocation-donut style="--alloc-percent: 0%">
+                                <div class="donut-center">
+                                    <div class="donut-percent" data-allocation-percent>0%</div>
+                                    <div class="donut-label">OF AVAILABLE BALANCE</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="wizard-actions">
+                    <button type="button" class="btn-inline btn-secondary" data-wizard-back>Back</button>
+                    <div class="flex items-center gap-3">
+                        <button type="button" class="btn-inline btn-secondary" data-wizard-next>Continue</button>
+                        <button type="submit" class="btn-inline btn-primary" data-wizard-submit>Start strategy</button>
+                        <span class="hidden text-xs uppercase tracking-wider" data-submit-status></span>
+                    </div>
+                </div>
+                <div class="wizard-progress" data-wizard-progress>
+                    <span class="wizard-progress-bar wizard-progress-bar-active" data-wizard-tick="0"></span>
+                    <span class="wizard-progress-bar" data-wizard-tick="1"></span>
+                    <span class="wizard-progress-bar" data-wizard-tick="2"></span>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
 <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" data-confirm-modal>
-    <div class="w-full max-w-md border-2 border-black bg-[#F5F5F0] p-4">
+    <div class="card-surface w-full max-w-md p-4">
         <div class="text-sm font-semibold uppercase tracking-wider" data-confirm-title>Confirm action</div>
         <div class="mt-3 space-y-2 text-xs uppercase tracking-wider">
             <div class="flex items-center justify-between" data-confirm-row="action">
@@ -144,8 +193,8 @@
             </div>
         </div>
         <div class="mt-4 flex items-center justify-end gap-2">
-            <button type="button" class="border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-confirm-cancel>[ Cancel ]</button>
-            <button type="button" class="border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-confirm-accept>[ Confirm ]</button>
+            <button type="button" class="btn-inline btn-secondary" data-confirm-cancel>Cancel</button>
+            <button type="button" class="btn-inline btn-primary" data-confirm-accept>Confirm</button>
         </div>
     </div>
 </div>
@@ -156,12 +205,7 @@
         const query = exchangeName ? `?exchange_name=${encodeURIComponent(exchangeName)}` : ""
         return fetch(`/strategy/data${query}`)
     }
-    const formatNumber = (value) => Number(value || 0).toFixed(2)
     const upper = (value) => String(value || "").toUpperCase()
-    const capitalize = (value) => {
-        const text = String(value || "")
-        return text ? text.charAt(0).toUpperCase() + text.slice(1) : ""
-    }
     const bindMaxButtons = (root = document) => {
         root.querySelectorAll("[data-max-button]").forEach((button) => {
             if (button.dataset.bound) return
@@ -173,42 +217,6 @@
                     const maxValue = input.getAttribute("max")
                     if (maxValue) input.value = maxValue
                 }
-            })
-        })
-    }
-    const applyToggleState = (form, action) => {
-        form.dataset.action = action
-        const actionTarget = action === "add" ? form.dataset.addAction : form.dataset.removeAction
-        const nameTarget = action === "add" ? form.dataset.addName : form.dataset.removeName
-        const maxTarget = action === "add" ? form.dataset.addMax : form.dataset.removeMax
-        const availableTarget = action === "add" ? form.dataset.addAvailable : form.dataset.removeAvailable
-        const input = form.querySelector("[data-amount-input]")
-        const available = form.querySelector("[data-available-value]")
-        const confirmButton = form.querySelector("[data-confirm-button]")
-        if (actionTarget) form.setAttribute("action", actionTarget)
-        if (input) {
-            input.setAttribute("name", nameTarget || "")
-            if (maxTarget) input.setAttribute("max", maxTarget)
-        }
-        if (available && availableTarget) available.textContent = availableTarget
-        if (confirmButton) {
-            confirmButton.classList.remove("hover:border-green-700", "hover:bg-green-100", "hover:text-green-900", "hover:border-red-600", "hover:bg-red-50", "hover:text-red-700")
-        }
-        form.querySelectorAll("[data-action-toggle]").forEach((toggle) => {
-            const isActive = toggle.getAttribute("data-action-toggle") === action
-            toggle.classList.toggle("font-semibold", isActive)
-            toggle.classList.toggle("bg-[#E7E1FF]", isActive)
-        })
-    }
-    const bindAmountForms = (root = document) => {
-        root.querySelectorAll("[data-amount-form]").forEach((form) => {
-            if (form.dataset.bound) return
-            form.dataset.bound = "1"
-            applyToggleState(form, form.dataset.action || "add")
-            form.querySelectorAll("[data-action-toggle]").forEach((toggle) => {
-                toggle.addEventListener("click", () => {
-                    applyToggleState(form, toggle.getAttribute("data-action-toggle"))
-                })
             })
         })
     }
@@ -335,70 +343,30 @@
             })
         })
     }
-    const renderActiveStrategies = (rows) => {
-        const loading = document.getElementById("strategy-active-loading")
-        const empty = document.getElementById("strategy-active-empty")
-        const list = document.getElementById("strategy-active-list")
-        if (loading) loading.classList.add("hidden")
-        if (!list) return
-        const items = Array.isArray(rows) ? rows : []
-        if (!items.length) {
-            list.innerHTML = ""
-            if (empty) empty.classList.remove("hidden")
-            return
-        }
-        if (empty) empty.classList.add("hidden")
-        list.innerHTML = items.map((s) => {
-            const name = String(s.name || "").trim()
-            const asset = String(s.asset || "").trim()
-            const exchangeName = String(s.exchange_name || "")
-            const quote = String(s.quote_currency || "USDC")
-            const current = formatNumber(s.current_capital_usdc)
-            const exchangeAvailable = Number(s.exchange_available_usdc || 0)
-            const reduceMax = Number(s.reduce_max_usdc || 0)
-            return `
-                <div class="border-2 border-black p-4">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-sm font-semibold uppercase tracking-wider">${name} ${asset}</h3>
-                        <span class="px-2 py-1 text-xs uppercase tracking-wider text-green-700">${upper(exchangeName)}</span>
-                    </div>
-                    <div class="mt-3 bg-[#F5F5F0] p-3 text-xs uppercase tracking-wider">
-                        <div>Current Startegy Value</div>
-                        <div class="text-base font-semibold num">${current} ${quote}</div>
-                        <div class="mt-2">Exchange: ${capitalize(exchangeName)}</div>
-                    </div>
-                    <form action="/strategy/add" method="post" class="mt-4 space-y-3" data-submit-feedback data-amount-form data-action="add" data-add-action="/strategy/add" data-remove-action="/strategy/remove" data-add-name="added_amount_usdc" data-remove-name="remove_amount_usdc" data-add-max="${exchangeAvailable}" data-remove-max="${reduceMax}" data-add-available="${formatNumber(exchangeAvailable)}" data-remove-available="${formatNumber(reduceMax)}" data-exchange-available="1" data-confirm-form data-strategy-name="${name}" data-asset="${asset}" data-exchange-name="${exchangeName}" data-quote-currency="${quote}">
-                        <input type="hidden" name="strategy_id" value="${s.id}">
-                        <div class="inline-flex border-2 border-black text-xs uppercase tracking-wider">
-                            <button type="button" class="px-3 py-2 font-semibold bg-[#E7E1FF]" data-action-toggle="add">Add</button>
-                            <button type="button" class="px-3 py-2" data-action-toggle="remove">Reduce</button>
-                        </div>
-                        <div data-max-wrapper>
-                            <div class="flex items-center justify-between text-xs uppercase tracking-wider">
-                                <span>Available: <span data-available-value>${formatNumber(exchangeAvailable)}</span> ${quote}</span>
-                            </div>
-                            <div class="mt-2 flex items-center gap-2">
-                                <input type="number" name="added_amount_usdc" min="10" max="${exchangeAvailable}" step="1" required data-max-input data-amount-input
-                                       class="block w-full max-w-[240px] border-2 border-black bg-transparent px-2 py-1 text-sm focus:outline-none">
-                                <button type="button" class="btn-secondary bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-max-button>[ Max ]</button>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <button type="submit" class="btn-primary border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" data-confirm-button>[ Confirm ]</button>
-                            <span class="hidden text-xs uppercase tracking-wider" data-submit-status></span>
-                        </div>
-                    </form>
-                    <form action="/strategy/stop" method="post" class="mt-4 flex" data-confirm-form data-confirm-action="stop" data-strategy-name="${name}" data-asset="${asset}" data-exchange-name="${exchangeName}" data-quote-currency="${quote}">
-                        <input type="hidden" name="strategy_id" value="${s.id}">
-                        <button type="submit" class="border-2 border-red-600 bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider text-red-700 hover:bg-red-50">[ Stop Strategy ]</button>
-                    </form>
-                </div>
-            `
-        }).join("")
-        bindMaxButtons(list)
-        bindAmountForms(list)
-        bindSubmitFeedback(list)
-        bindConfirmations(list)
+    let latestBalance = 0
+    const updateSummary = () => {
+        const strategyEl = document.querySelector("[data-summary-strategy]")
+        const exchangeEl = document.querySelector("[data-summary-exchange]")
+        const pairEl = document.querySelector("[data-summary-pair]")
+        const apyEl = document.querySelector("[data-summary-apy]")
+        const selectedCard = document.querySelector("[data-strategy-card].strategy-select-card-active")
+        const strategyName = selectedCard ? selectedCard.dataset.strategyName : "Strategy"
+        const apy = selectedCard ? selectedCard.dataset.strategyApy : ""
+        const exchangeValue = exchangeSelect ? exchangeSelect.value : ""
+        const pairValue = (document.querySelector("[data-asset-select]") || {}).value || ""
+        if (strategyEl) strategyEl.textContent = strategyName || "--"
+        if (exchangeEl) exchangeEl.textContent = exchangeValue ? upper(exchangeValue) : "--"
+        if (pairEl) pairEl.textContent = pairValue ? upper(pairValue) : "--"
+        if (apyEl) apyEl.textContent = apy || "--"
+    }
+    const updateAllocation = () => {
+        const input = document.querySelector("[data-capital-input]")
+        const donut = document.querySelector("[data-allocation-donut]")
+        const percentEl = document.querySelector("[data-allocation-percent]")
+        const value = Number(input ? input.value : 0)
+        const percent = latestBalance > 0 ? Math.min(100, Math.max(0, (value / latestBalance) * 100)) : 0
+        if (donut) donut.style.setProperty("--alloc-percent", `${percent}%`)
+        if (percentEl) percentEl.textContent = `${Math.round(percent)}%`
     }
     const applyStrategyData = (data) => {
         if (!data || data.error) return
@@ -418,28 +386,13 @@
             el.textContent = quoteCurrency
         })
         const balance = Number(data.usdc_balance || 0)
+        latestBalance = balance
         document.querySelectorAll("[data-usdc-balance]").forEach((el) => {
             el.textContent = balance.toFixed(2)
         })
         document.querySelectorAll("[data-usdc-max]").forEach((el) => {
             el.setAttribute("max", balance.toString())
         })
-        document.querySelectorAll("[data-amount-form]").forEach((formEl) => {
-            if (formEl.dataset.exchangeAvailable) return
-            formEl.dataset.addMax = balance.toString()
-            formEl.dataset.addAvailable = balance.toFixed(2)
-            if (formEl.dataset.action === "add") {
-                const input = formEl.querySelector("[data-amount-input]")
-                const available = formEl.querySelector("[data-available-value]")
-                if (input) input.setAttribute("max", balance.toString())
-                if (available) available.textContent = balance.toFixed(2)
-            }
-        })
-        const rows = Array.isArray(data.active_strategies) ? data.active_strategies : []
-        const activeCount = Number.isFinite(Number(data.active_count)) ? Number(data.active_count) : rows.length
-        const countEl = document.getElementById("strategy-active-count")
-        if (countEl) countEl.textContent = `${activeCount}`
-        renderActiveStrategies(rows)
         document.querySelectorAll(".loading-text").forEach((el) => el.classList.remove("loading-text"))
 
         const assetSelect = document.querySelector("[data-asset-select]")
@@ -455,6 +408,8 @@
                 assetSelect.innerHTML = `<option value="" selected disabled>--</option>`
             }
         }
+        updateSummary()
+        updateAllocation()
 
         const minCapital = Number(data.min_capital_usd)
         document.querySelectorAll("[data-min-capital-input]").forEach((input) => {
@@ -488,33 +443,12 @@
         exchangeSelect.addEventListener("change", refreshStrategyData)
     }
     bindMaxButtons()
-    bindAmountForms()
     bindSubmitFeedback()
     bindConfirmations()
-    const viewContainer = document.querySelector("[data-strategy-views]")
-    if (viewContainer) {
-        const panels = Array.from(viewContainer.querySelectorAll("[data-view-panel]"))
-        const buttons = Array.from(document.querySelectorAll("[data-view-button]"))
-        const setView = (view) => {
-            panels.forEach((panel) => {
-                panel.classList.toggle("hidden", panel.getAttribute("data-view-panel") !== view)
-            })
-            buttons.forEach((button) => {
-                const isActive = button.getAttribute("data-view") === view
-                button.classList.toggle("font-semibold", isActive)
-                button.classList.toggle("bg-[#E7E1FF]", isActive)
-            })
-        }
-        const defaultView = viewContainer.getAttribute("data-default-view") || "start"
-        setView(defaultView)
-        buttons.forEach((button) => {
-            button.addEventListener("click", () => setView(button.getAttribute("data-view")))
-        })
-    }
     const wizard = document.querySelector("[data-strategy-wizard]")
     if (wizard) {
         const steps = Array.from(wizard.querySelectorAll("[data-wizard-step]"))
-        const dots = Array.from(document.querySelectorAll("[data-wizard-dot]"))
+        const ticks = Array.from(document.querySelectorAll("[data-wizard-tick]"))
         const backBtn = wizard.querySelector("[data-wizard-back]")
         const nextBtn = wizard.querySelector("[data-wizard-next]")
         const submitBtn = wizard.querySelector("[data-wizard-submit]")
@@ -522,11 +456,7 @@
         const setStep = (index) => {
             currentStep = Math.max(0, Math.min(index, steps.length - 1))
             steps.forEach((step, i) => step.classList.toggle("hidden", i !== currentStep))
-            dots.forEach((dot, i) => {
-                const isActive = i <= currentStep
-                dot.classList.toggle("bg-[#E7E1FF]", isActive)
-                dot.classList.toggle("font-semibold", isActive)
-            })
+            ticks.forEach((tick, i) => tick.classList.toggle("wizard-progress-bar-active", i === currentStep))
             if (backBtn) {
                 const isDisabled = currentStep === 0
                 backBtn.disabled = isDisabled
@@ -556,5 +486,25 @@
         if (backBtn) backBtn.addEventListener("click", () => setStep(currentStep - 1))
         setStep(0)
     }
+    const strategyCards = Array.from(document.querySelectorAll("[data-strategy-card]"))
+    const selectCard = (card) => {
+        if (!card) return
+        strategyCards.forEach((item) => item.classList.toggle("strategy-select-card-active", item === card))
+        const form = document.getElementById("strategy-form")
+        if (form) form.dataset.strategyName = card.dataset.strategyName || "Strategy"
+        updateSummary()
+    }
+    strategyCards.forEach((card) => {
+        card.addEventListener("click", () => selectCard(card))
+    })
+    if (strategyCards.length) {
+        const activeCard = strategyCards.find((card) => card.classList.contains("strategy-select-card-active")) || strategyCards[0]
+        selectCard(activeCard)
+    }
+    const assetSelect = document.querySelector("[data-asset-select]")
+    if (assetSelect) assetSelect.addEventListener("change", updateSummary)
+    if (exchangeSelect) exchangeSelect.addEventListener("change", updateSummary)
+    const capitalInput = document.querySelector("[data-capital-input]")
+    if (capitalInput) capitalInput.addEventListener("input", updateAllocation)
 </script>
 {% endblock %}

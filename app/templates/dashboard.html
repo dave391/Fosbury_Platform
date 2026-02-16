@@ -1,49 +1,70 @@
 {% extends "base.html" %}
-{% from "sidebar.html" import sidebar %}
+{% block content %}
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div>
+        <h2 class="text-2xl font-bold">Dashboard</h2>
+        <div class="text-white/50">Portfolio overview and strategy performance</div>
+    </div>
+</div>
 
-{% block body %}
-<div class="min-h-screen">
-    <div class="flex min-h-screen flex-col md:flex-row">
-        {{ sidebar("dashboard") }}
-
-        <main class="flex-1 p-4">
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
-                <div class="page-header lg:col-span-8">
-                    <h2 class="page-title">Overview</h2>
-                    {% if has_active and selected_strategy %}
-                    <div class="page-subtitle">View: {{ selected_strategy.name }}</div>
-                    {% endif %}
+            <div class="card-surface mt-8 px-6 py-8">
+                <p class="card-title">Portfolio Value</p>
+                <div class="mt-2 flex flex-wrap items-baseline gap-3">
+                    <p class="metric-hero font-semibold num"><span id="metric-current-card" class="loading-text num">Loading</span></p>
+                    <span class="inline-flex items-center gap-1 text-sm font-semibold metric-positive">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M7 17L17 7m0 0H8m9 0v9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        +0.0%
+                    </span>
                 </div>
-                <div class="panel-secondary p-4 lg:col-span-4">
-                    <div class="ops-summary">
-                        <div class="ops-summary-row">
-                            <span>Running strategy</span>
-                            <span class="font-semibold num">{{ active_strategies|length if active_strategies else 0 }}</span>
-                        </div>
-                    </div>
-                </div>
+                <div class="mt-5 accent-line"></div>
             </div>
 
-            <div class="mt-4">
-                <div class="inline-flex border-2 border-black bg-[#F5F5F0] text-xs uppercase tracking-wider" data-view-toggle>
-                    <button type="button" class="px-3 py-2 font-semibold bg-[#E7E1FF]" data-view-button data-view="current">[ Current ]</button>
-                    <button type="button" class="px-3 py-2" data-view-button data-view="historical">[ Historical ]</button>
+            <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div class="panel-secondary metric-card px-4 py-3">
+                    <p class="card-title">Daily P&amp;L</p>
+                    <span class="metric-icon">$</span>
+                    <p class="mt-2 text-lg font-semibold loading-text num" id="metric-pnl">Loading</p>
+                </div>
+                <div class="panel-secondary metric-card px-4 py-3">
+                    <p class="card-title">Total Return</p>
+                    <span class="metric-icon">%</span>
+                    <p class="mt-2 text-lg font-semibold"><span id="metric-apr" class="loading-text num">Loading</span></p>
+                </div>
+                <div class="panel-secondary metric-card px-4 py-3">
+                    <p class="card-title">Running Days</p>
+                    <span class="metric-icon">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-width="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6" stroke-width="2"></line>
+                            <line x1="8" y1="2" x2="8" y2="6" stroke-width="2"></line>
+                            <line x1="3" y1="10" x2="21" y2="10" stroke-width="2"></line>
+                        </svg>
+                    </span>
+                    <p class="mt-2 text-lg font-semibold num">{{ metrics.days_active }}</p>
                 </div>
             </div>
 
             <div class="mt-4" data-dashboard-views data-default-view="current">
                 <div data-view-panel="current">
                     {% if not has_active %}
-                    <div class="border-2 border-black p-4">
+                    <div class="card-surface p-4">
                         <p class="text-sm font-editorial">No active strategy.</p>
-                        <a class="btn-primary mt-3 inline-block border-2 border-black bg-transparent px-3 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]" href="/strategy">[ Go to Strategy ]</a>
+                        <a class="btn btn-primary mt-3 inline-block" href="/strategy">Go to Strategy</a>
                     </div>
                     {% else %}
-                    <div class="border-2 border-black p-4">
+                    <div class="card-surface p-6">
                         <div class="flex flex-wrap items-center justify-between gap-3">
-                            <h3 class="text-sm font-semibold uppercase tracking-wider">Active Strategies</h3>
-                            <form action="/dashboard" method="get" class="flex flex-wrap items-center gap-2">
-                                <select name="strategy_id" class="border border-black bg-transparent px-2 py-1 text-xs">
+                            <h3 class="section-title">Active Strategies</h3>
+                            <form action="/dashboard" method="get" class="flex flex-nowrap items-center gap-2">
+                                <select class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider">
+                                    <option>All Types</option>
+                                </select>
+                                <select class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider">
+                                    <option>All Exchanges</option>
+                                </select>
+                                <select name="strategy_id" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider">
                                     <option value="">All</option>
                                 {% for s in active_strategies %}
                                     <option value="{{ s.id }}" {% if strategy_filter_id == s.id %}selected{% endif %}>
@@ -51,136 +72,69 @@
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <button type="submit" class="btn-primary border border-black bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-wider hover:bg-black hover:text-[#F5F5F0]">[ Apply ]</button>
+                                <button type="submit" class="btn btn-primary px-2 py-1 text-[0.65rem]">Apply</button>
                             </form>
                         </div>
-                        <div class="mt-3 overflow-x-auto">
-                            <table class="min-w-full text-xs">
-                                <thead>
-                                    <tr class="border-b-2 border-black">
-                                        <th class="py-2 text-center uppercase tracking-wider">Strategy</th>
-                                        <th class="py-2 text-center uppercase tracking-wider">Exchange</th>
-                                        <th class="py-2 text-center uppercase tracking-wider">Asset</th>
-                                        <th class="py-2 text-center uppercase tracking-wider">Starting Capital</th>
-                                        <th class="py-2 text-center uppercase tracking-wider">Current Capital</th>
-                                        <th class="py-2 text-center uppercase tracking-wider">Days</th>
-                                        <th class="py-2 text-center uppercase tracking-wider">APR%</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for s in table_rows %}
-                                    <tr class="border-b border-black">
-                                        <td class="py-2 text-center">{{ s.name }}</td>
-                                        <td class="py-2 text-center">{{ s.exchange_name|capitalize }}</td>
-                                        <td class="py-2 text-center">{{ s.asset }}</td>
-                                        <td class="py-2 text-center num">{{ s.allocated_capital_usdc|round(2) }} USDC</td>
-                                        <td class="py-2 text-center num">{{ s.current_capital_usdc|round(2) }} USDC</td>
-                                        <td class="py-2 text-center num">{{ s.days_active }}</td>
-                                        <td class="py-2 text-center num {% if s.apr_percent < 0 %}text-red-700{% elif s.apr_percent > 0 %}text-green-700{% endif %}">{{ s.apr_percent|round(2) }}%</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                        <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+                            {% for s in table_rows %}
+                            <div class="panel-secondary strategy-card p-4">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p class="text-sm font-semibold">{{ s.asset }}</p>
+                                        <div class="mt-1 flex flex-wrap items-center gap-2">
+                                            <p class="text-xs uppercase tracking-wider">{{ s.name }}</p>
+                                            <span class="badge">{{ s.exchange_name|capitalize }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="status-dot"></span>
+                                <div class="mt-4 grid grid-cols-2 gap-3 text-xs uppercase tracking-wider">
+                                    <div>
+                                        <p>PnL</p>
+                                        <p class="mt-1 text-base font-semibold num {% if s.apr_percent < 0 %}metric-negative{% elif s.apr_percent > 0 %}metric-positive{% endif %}">{% if s.apr_percent > 0 %}↗ {% endif %}{{ s.apr_percent|round(2) }}%</p>
+                                    </div>
+                                    <div>
+                                        <p>Allocated</p>
+                                        <p class="mt-1 text-base font-semibold num">${{ s.allocated_capital_usdc|round(2) }}</p>
+                                    </div>
+                                </div>
+                                <div class="mt-4 flex flex-wrap items-center gap-2">
+                                    <button type="button" class="btn-inline btn-secondary" data-manage-open data-strategy-id="{{ s.id }}" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}" data-exchange-available="{{ s.exchange_available_usdc }}" data-reduce-max="{{ s.reduce_max_usdc }}">Manage</button>
+                                    <form action="/strategy/stop" method="post" class="flex" data-confirm-form data-confirm-action="stop" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}">
+                                        <input type="hidden" name="strategy_id" value="{{ s.id }}">
+                                        <button type="submit" class="btn-inline btn-danger">Stop Strategy</button>
+                                    </form>
+                                </div>
+                            </div>
+                            {% endfor %}
                         </div>
                     </div>
 
-                    <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-                        <div class="border-2 border-black p-4 xl:col-span-8">
-                            <h3 class="text-sm font-semibold uppercase tracking-wider">Cumulative PnL</h3>
-                            <div class="mt-3 text-sm font-editorial loading-text" id="equity-loading">Loading</div>
-                            <div class="mt-3 hidden" id="equity-chart">
-                                <div class="relative">
-                                    <svg viewBox="0 0 {{ equity_chart.width }} {{ equity_chart.height }}" class="h-64 w-full">
-                                        <g id="equity-axes"></g>
-                                        <g id="equity-lines"></g>
-                                    </svg>
-                                    <div id="equity-tooltip" class="equity-tooltip hidden"></div>
-                                </div>
-                                <div class="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-wider" id="equity-legend"></div>
+                    <div class="mt-4 panel-secondary p-4">
+                        <h3 class="section-title">Profit &amp; Loss Chart</h3>
+                        <div class="mt-3 text-sm font-editorial loading-text" id="equity-loading">Loading</div>
+                        <div class="mt-3 hidden" id="equity-chart">
+                            <div class="relative">
+                                <svg viewBox="0 0 {{ equity_chart.width }} {{ equity_chart.height }}" class="h-64 w-full">
+                                    <g id="equity-axes"></g>
+                                    <g id="equity-lines"></g>
+                                </svg>
+                                <div id="equity-tooltip" class="equity-tooltip hidden"></div>
                             </div>
-                            <p class="mt-3 hidden text-sm font-editorial" id="equity-empty">No snapshots available.</p>
-                            
+                            <div class="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-wider" id="equity-legend"></div>
                         </div>
-                        <div class="xl:col-span-4">
-                            <div class="grid grid-cols-2 gap-3">
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">PnL</p>
-                                    <p class="mt-2 text-lg font-semibold loading-text num" id="metric-pnl">Loading</p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">APR</p>
-                                    <p class="mt-2 text-lg font-semibold"><span id="metric-apr" class="loading-text num">Loading</span></p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">Allocated Capital</p>
-                                    <p class="mt-2 text-lg font-semibold num">{{ metrics.allocated_capital_usdc|round(2) }} USDC</p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">Current Balance</p>
-                                    <p class="mt-2 text-lg font-semibold num"><span id="metric-current-card" class="loading-text num">Loading</span></p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">Fees</p>
-                                    <p class="mt-2 text-lg font-semibold loading-text num" id="metric-fees">Loading</p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">Days Active</p>
-                                    <p class="mt-2 text-lg font-semibold num">{{ metrics.days_active }}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-
-                <div data-view-panel="historical">
-                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
-                        <div class="border-2 border-black p-4 xl:col-span-8">
-                            <h3 class="text-sm font-semibold uppercase tracking-wider">Cumulative PnL</h3>
-                            <div class="mt-3 text-sm font-editorial loading-text" id="historical-equity-loading">Loading</div>
-                            <div class="mt-3 hidden" id="historical-equity-chart">
-                                <div class="relative">
-                                    <svg viewBox="0 0 {{ equity_chart.width }} {{ equity_chart.height }}" class="h-64 w-full">
-                                        <g id="historical-equity-axes"></g>
-                                        <g id="historical-equity-lines"></g>
-                                    </svg>
-                                    <div id="historical-equity-tooltip" class="equity-tooltip hidden"></div>
-                                </div>
-                                <div class="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-wider" id="historical-equity-legend"></div>
-                            </div>
-                            <p class="mt-3 hidden text-sm font-editorial" id="historical-equity-empty">No closed strategies yet.</p>
-                        </div>
-                        <div class="xl:col-span-4">
-                            <div class="grid grid-cols-2 gap-3">
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">Closed Strategies</p>
-                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-count">Loading</p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">Total PnL</p>
-                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-pnl">Loading</p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">APR</p>
-                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-apr">Loading</p>
-                                </div>
-                                <div class="panel-secondary p-4">
-                                    <p class="text-xs uppercase tracking-wider">Fees</p>
-                                    <p class="mt-2 text-lg font-semibold loading-text num" id="historical-fees">Loading</p>
-                                </div>
-                            </div>
-                        </div>
+                        <p class="mt-3 hidden text-sm font-editorial" id="equity-empty">No snapshots available.</p>
                     </div>
 
-                    <div class="mt-4 border-2 border-black p-4">
+                    <div class="card-surface mt-4 p-6">
                         <div class="flex flex-wrap items-center justify-between gap-3">
-                            <h3 class="text-sm font-semibold uppercase tracking-wider">Closed Strategies</h3>
+                            <h3 class="section-title">Terminated Strategies</h3>
                         </div>
                         {% if historical_rows %}
                         <div class="mt-3 overflow-x-auto">
                             <table class="min-w-full text-xs" id="historical-closed-table">
                                 <thead>
-                                    <tr class="border-b-2 border-black">
+                                    <tr class="border-b-2 border-white/60">
                                         <th class="py-2 text-center uppercase tracking-wider">
                                             <button type="button" class="inline-flex items-center gap-1" data-sort-key="start">
                                                 <span>Start</span>
@@ -206,20 +160,8 @@
                                             </button>
                                         </th>
                                         <th class="py-2 text-center uppercase tracking-wider">
-                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="asset">
-                                                <span>Asset</span>
-                                                <span class="text-[0.6rem]" data-sort-indicator></span>
-                                            </button>
-                                        </th>
-                                        <th class="py-2 text-center uppercase tracking-wider">
                                             <button type="button" class="inline-flex items-center gap-1" data-sort-key="starting_capital_usdc">
-                                                <span>Starting Capital</span>
-                                                <span class="text-[0.6rem]" data-sort-indicator></span>
-                                            </button>
-                                        </th>
-                                        <th class="py-2 text-center uppercase tracking-wider">
-                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="final_capital_usdc">
-                                                <span>Final Capital</span>
+                                                <span>Invested</span>
                                                 <span class="text-[0.6rem]" data-sort-indicator></span>
                                             </button>
                                         </th>
@@ -230,14 +172,8 @@
                                             </button>
                                         </th>
                                         <th class="py-2 text-center uppercase tracking-wider">
-                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="fees_usdc">
-                                                <span>Fee</span>
-                                                <span class="text-[0.6rem]" data-sort-indicator></span>
-                                            </button>
-                                        </th>
-                                        <th class="py-2 text-center uppercase tracking-wider">
                                             <button type="button" class="inline-flex items-center gap-1" data-sort-key="apr_percent">
-                                                <span>APR%</span>
+                                                <span>ROI%</span>
                                                 <span class="text-[0.6rem]" data-sort-indicator></span>
                                             </button>
                                         </th>
@@ -245,16 +181,13 @@
                                 </thead>
                                 <tbody id="historical-closed-body">
                                     {% for s in historical_rows %}
-                                    <tr class="border-b border-black">
+                                    <tr class="border-b border-white/60">
                                         <td class="py-2 text-center" data-value="{{ s.start }}">{{ s.start }}</td>
                                         <td class="py-2 text-center" data-value="{{ s.stop }}">{{ s.stop }}</td>
                                         <td class="py-2 text-center" data-value="{{ s.name }}">{{ s.name }}</td>
                                         <td class="py-2 text-center" data-value="{{ s.exchange_name|capitalize }}">{{ s.exchange_name|capitalize }}</td>
-                                        <td class="py-2 text-center" data-value="{{ s.asset }}">{{ s.asset }}</td>
-                                        <td class="py-2 text-center num" data-value="{{ s.starting_capital_usdc }}">{{ s.starting_capital_usdc|round(2) }} USDC</td>
-                                        <td class="py-2 text-center num" data-value="{{ s.final_capital_usdc }}">{{ s.final_capital_usdc|round(2) }} USDC</td>
-                                        <td class="py-2 text-center num {% if s.pnl_usdc < 0 %}text-red-700{% endif %}" data-value="{{ s.pnl_usdc }}">{{ s.pnl_usdc|round(2) }} USDC</td>
-                                        <td class="py-2 text-center num" data-value="{{ s.fees_usdc }}">{{ s.fees_usdc|round(2) }} USDC</td>
+                                        <td class="py-2 text-center num" data-value="{{ s.starting_capital_usdc }}">${{ s.starting_capital_usdc|round(2) }}</td>
+                                        <td class="py-2 text-center num {% if s.pnl_usdc < 0 %}text-red-700{% endif %}" data-value="{{ s.pnl_usdc }}">${{ s.pnl_usdc|round(2) }}</td>
                                         <td class="py-2 text-center num {% if s.apr_percent < 0 %}text-red-700{% elif s.apr_percent > 0 %}text-green-700{% endif %}" data-value="{{ s.apr_percent }}">{{ s.apr_percent|round(2) }}%</td>
                                     </tr>
                                     {% endfor %}
@@ -265,15 +198,108 @@
                         <div class="mt-3 text-sm font-editorial">No closed strategies yet.</div>
                         {% endif %}
                     </div>
+                    <div class="mt-4 grid grid-cols-2 gap-3">
+                        <div class="panel-secondary p-4">
+                            <p class="card-title">Closed Strategies</p>
+                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-count">Loading</p>
+                        </div>
+                        <div class="panel-secondary p-4">
+                            <p class="card-title">Total PnL</p>
+                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-pnl">Loading</p>
+                        </div>
+                        <div class="panel-secondary p-4">
+                            <p class="card-title">APR</p>
+                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-apr">Loading</p>
+                        </div>
+                        <div class="panel-secondary p-4">
+                            <p class="card-title">Fees</p>
+                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-fees">Loading</p>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
-        </main>
-    </div>
-</div>
+            <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" data-manage-modal>
+                <div class="card-surface w-full max-w-md p-4">
+                    <div class="text-sm font-semibold uppercase tracking-wider">Manage strategy</div>
+                    <form action="/strategy/add" method="post" class="mt-4 space-y-3" data-submit-feedback data-amount-form data-action="add" data-add-action="/strategy/add" data-remove-action="/strategy/remove" data-add-name="added_amount_usdc" data-remove-name="remove_amount_usdc" data-confirm-form>
+                        <input type="hidden" name="strategy_id" value="" data-strategy-id-input>
+                        <div class="toggle-group">
+                            <button type="button" class="toggle-button toggle-active" data-action-toggle="add">Add</button>
+                            <button type="button" class="toggle-button" data-action-toggle="remove">Reduce</button>
+                        </div>
+                        <div data-max-wrapper>
+                            <div class="flex items-center justify-between text-xs uppercase tracking-wider">
+                                <span>Available: <span data-available-value>0.00</span> <span data-available-quote></span></span>
+                            </div>
+                            <div class="mt-2 flex items-center gap-2">
+                                <input type="number" name="added_amount_usdc" min="10" max="0" step="1" required data-max-input data-amount-input
+                                       class="block w-full max-w-[240px] input">
+                                <button type="button" class="btn-inline btn-secondary" data-max-button>Max</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end gap-2">
+                            <button type="button" class="btn-inline btn-secondary" data-manage-cancel>Cancel</button>
+                            <button type="submit" class="btn-inline btn-primary" data-confirm-button>Confirm</button>
+                            <span class="hidden text-xs uppercase tracking-wider" data-submit-status></span>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" data-confirm-modal>
+                <div class="card-surface w-full max-w-md p-4">
+                    <div class="text-sm font-semibold uppercase tracking-wider" data-confirm-title>Confirm action</div>
+                    <div class="mt-3 space-y-2 text-xs uppercase tracking-wider">
+                        <div class="flex items-center justify-between" data-confirm-row="action">
+                            <span>Action</span>
+                            <span data-confirm-action></span>
+                        </div>
+                        <div class="flex items-center justify-between" data-confirm-row="strategy">
+                            <span>Strategy</span>
+                            <span data-confirm-strategy></span>
+                        </div>
+                        <div class="flex items-center justify-between" data-confirm-row="exchange">
+                            <span>Exchange</span>
+                            <span data-confirm-exchange></span>
+                        </div>
+                        <div class="flex items-center justify-between" data-confirm-row="asset">
+                            <span>Asset</span>
+                            <span data-confirm-asset></span>
+                        </div>
+                        <div class="flex items-center justify-between" data-confirm-row="amount">
+                            <span>Amount</span>
+                            <span><span data-confirm-amount></span> <span data-confirm-quote></span></span>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center justify-end gap-2">
+                        <button type="button" class="btn-inline btn-secondary" data-confirm-cancel>Cancel</button>
+                        <button type="button" class="btn-inline btn-primary" data-confirm-accept>Confirm</button>
+                    </div>
+                </div>
+            </div>
 <script>
     const params = new URLSearchParams(window.location.search)
     const strategyId = params.get("strategy_id")
     const url = strategyId ? `/dashboard/data?strategy_id=${strategyId}` : "/dashboard/data"
+    const formatUsd = (value) => new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Number(value) || 0)
+    const formatSignedUsd = (value) => {
+        const num = Number(value) || 0
+        if (num > 0) return `+${formatUsd(num)}`
+        return formatUsd(num)
+    }
+    const formatNumber = (value) => Number(value || 0).toFixed(2)
+    const formatSignedPercent = (value) => {
+        const num = Number(value) || 0
+        if (num > 0) return `+${formatNumber(num)}%`
+        if (num < 0) return `-${formatNumber(Math.abs(num))}%`
+        return `${formatNumber(0)}%`
+    }
+    const upper = (value) => String(value || "").toUpperCase()
     const setupClosedTableSorting = () => {
         const table = document.getElementById("historical-closed-table")
         const body = document.getElementById("historical-closed-body")
@@ -285,11 +311,8 @@
             stop: "date",
             name: "text",
             exchange: "text",
-            asset: "text",
             starting_capital_usdc: "number",
-            final_capital_usdc: "number",
             pnl_usdc: "number",
-            fees_usdc: "number",
             apr_percent: "number",
         }
         const state = { key: "stop", dir: "desc" }
@@ -363,7 +386,7 @@
         let paletteIndex = 0
         series.forEach((item) => {
             if (item.key === "all") {
-                colorByKey[item.key] = "#111111"
+                colorByKey[item.key] = "#ffffff"
                 return
             }
             colorByKey[item.key] = palette[paletteIndex % palette.length]
@@ -379,9 +402,9 @@
         })
         const colorFor = (item) => {
             if (String(item.key) === highlightKey || item.key === "all") {
-                return "#111111"
+                return "#ffffff"
             }
-            return colorByKey[item.key] || "#111111"
+            return colorByKey[item.key] || "#ffffff"
         }
         const drawAxis = () => {
             if (!axesEl || series.length === 0) return
@@ -389,7 +412,7 @@
             const width = chart.width || 640
             const height = chart.height || 220
             const padding = 20
-            const axisColor = "#111111"
+            const axisColor = "rgba(255, 255, 255, 0.6)"
             const xAxis = document.createElementNS("http://www.w3.org/2000/svg", "line")
             xAxis.setAttribute("x1", padding)
             xAxis.setAttribute("y1", height - padding)
@@ -532,7 +555,7 @@
                 const dateList = focusSeries.dates || dates || []
                 const dateLabel = dateList[index] || ""
                 const seriesLabel = focusSeries.label || String(focusSeries.key) || "Series"
-                tooltip.innerHTML = `<div>${seriesLabel} · ${dateLabel}</div><div class="num">USDC ${value.toFixed(2)}</div>`
+                tooltip.innerHTML = `<div>${seriesLabel} · ${dateLabel}</div><div class="num">${formatUsd(value)}</div>`
                 const rect = svg.getBoundingClientRect()
                 const scaleX = rect.width / width
                 const scaleY = rect.height / height
@@ -566,6 +589,207 @@
             svg.addEventListener("mouseleave", hideTooltip)
         }
     }
+    const bindMaxButtons = (root = document) => {
+        root.querySelectorAll("[data-max-button]").forEach((button) => {
+            if (button.dataset.bound) return
+            button.dataset.bound = "1"
+            button.addEventListener("click", () => {
+                const wrapper = button.closest("[data-max-wrapper]")
+                const input = wrapper ? wrapper.querySelector("[data-max-input]") : null
+                if (input) {
+                    const maxValue = input.getAttribute("max")
+                    if (maxValue) input.value = maxValue
+                }
+            })
+        })
+    }
+    const applyToggleState = (form, action) => {
+        form.dataset.action = action
+        const actionTarget = action === "add" ? form.dataset.addAction : form.dataset.removeAction
+        const nameTarget = action === "add" ? form.dataset.addName : form.dataset.removeName
+        const maxTarget = action === "add" ? form.dataset.addMax : form.dataset.removeMax
+        const availableTarget = action === "add" ? form.dataset.addAvailable : form.dataset.removeAvailable
+        const input = form.querySelector("[data-amount-input]")
+        const available = form.querySelector("[data-available-value]")
+        if (actionTarget) form.setAttribute("action", actionTarget)
+        if (input) {
+            input.setAttribute("name", nameTarget || "")
+            if (maxTarget) input.setAttribute("max", maxTarget)
+        }
+        if (available && availableTarget) available.textContent = availableTarget
+        form.querySelectorAll("[data-action-toggle]").forEach((toggle) => {
+            const isActive = toggle.getAttribute("data-action-toggle") === action
+            toggle.classList.toggle("toggle-active", isActive)
+        })
+    }
+    const bindAmountForms = (root = document) => {
+        root.querySelectorAll("[data-amount-form]").forEach((form) => {
+            if (form.dataset.bound) return
+            form.dataset.bound = "1"
+            applyToggleState(form, form.dataset.action || "add")
+            form.querySelectorAll("[data-action-toggle]").forEach((toggle) => {
+                toggle.addEventListener("click", () => {
+                    applyToggleState(form, toggle.getAttribute("data-action-toggle"))
+                })
+            })
+        })
+    }
+    const bindSubmitFeedback = (root = document) => {
+        root.querySelectorAll("form[data-submit-feedback]").forEach((form) => {
+            if (form.dataset.submitBound) return
+            form.dataset.submitBound = "1"
+            form.addEventListener("submit", () => {
+                if (form.dataset.confirmForm && form.dataset.confirmed !== "1") return
+                const status = form.querySelector("[data-submit-status]")
+                const button = form.querySelector("button[type='submit']")
+                if (status) {
+                    status.textContent = "Submitting..."
+                    status.classList.remove("hidden")
+                }
+                if (button) {
+                    button.disabled = true
+                    button.classList.add("opacity-70")
+                }
+            })
+        })
+    }
+    const confirmModal = document.querySelector("[data-confirm-modal]")
+    const confirmAction = confirmModal ? confirmModal.querySelector("[data-confirm-action]") : null
+    const confirmStrategy = confirmModal ? confirmModal.querySelector("[data-confirm-strategy]") : null
+    const confirmExchange = confirmModal ? confirmModal.querySelector("[data-confirm-exchange]") : null
+    const confirmAsset = confirmModal ? confirmModal.querySelector("[data-confirm-asset]") : null
+    const confirmAmount = confirmModal ? confirmModal.querySelector("[data-confirm-amount]") : null
+    const confirmQuote = confirmModal ? confirmModal.querySelector("[data-confirm-quote]") : null
+    const confirmCancel = confirmModal ? confirmModal.querySelector("[data-confirm-cancel]") : null
+    const confirmAccept = confirmModal ? confirmModal.querySelector("[data-confirm-accept]") : null
+    let pendingForm = null
+    const setRow = (key, value) => {
+        const row = confirmModal ? confirmModal.querySelector(`[data-confirm-row="${key}"]`) : null
+        if (!row) return
+        if (value) {
+            row.classList.remove("hidden")
+        } else {
+            row.classList.add("hidden")
+        }
+    }
+    const actionLabel = (form) => {
+        const raw = (form.dataset.confirmAction || form.dataset.action || "").toLowerCase()
+        if (raw === "start") return "Start strategy"
+        if (raw === "stop") return "Stop strategy"
+        if (raw === "remove") return "Remove capital"
+        return "Add capital"
+    }
+    const openConfirm = (form) => {
+        if (!confirmModal) return
+        const strategyName = form.dataset.strategyName || "Strategy"
+        const exchangeName = form.dataset.exchangeName || ""
+        const asset = form.dataset.asset || ""
+        const quote = form.dataset.quoteCurrency || "USDC"
+        const amountInput = form.querySelector("[data-amount-input]") || form.querySelector("input[name='capital_usdc']")
+        const amountValue = amountInput ? amountInput.value : ""
+        if (confirmAction) confirmAction.textContent = actionLabel(form)
+        if (confirmStrategy) confirmStrategy.textContent = strategyName
+        if (confirmExchange) confirmExchange.textContent = exchangeName ? upper(exchangeName) : "-"
+        if (confirmAsset) confirmAsset.textContent = asset ? upper(asset) : "-"
+        if (confirmAmount) confirmAmount.textContent = amountValue || "-"
+        if (confirmQuote) confirmQuote.textContent = amountValue ? quote : ""
+        setRow("action", true)
+        setRow("strategy", true)
+        setRow("exchange", true)
+        setRow("asset", true)
+        setRow("amount", Boolean(amountValue))
+        confirmModal.classList.remove("hidden")
+        confirmModal.classList.add("flex")
+        pendingForm = form
+    }
+    const resetSubmitState = (form) => {
+        if (!form) return
+        const status = form.querySelector("[data-submit-status]")
+        const button = form.querySelector("button[type='submit']")
+        if (status) {
+            status.textContent = ""
+            status.classList.add("hidden")
+        }
+        if (button) {
+            button.disabled = false
+            button.classList.remove("opacity-70")
+        }
+    }
+    const closeConfirm = () => {
+        if (!confirmModal) return
+        if (pendingForm) resetSubmitState(pendingForm)
+        confirmModal.classList.add("hidden")
+        confirmModal.classList.remove("flex")
+        pendingForm = null
+    }
+    if (confirmCancel) {
+        confirmCancel.addEventListener("click", () => closeConfirm())
+    }
+    if (confirmModal) {
+        confirmModal.addEventListener("click", (event) => {
+            if (event.target === confirmModal) closeConfirm()
+        })
+    }
+    if (confirmAccept) {
+        confirmAccept.addEventListener("click", () => {
+            if (!pendingForm) return
+            pendingForm.dataset.confirmed = "1"
+            if (typeof pendingForm.requestSubmit === "function") {
+                pendingForm.requestSubmit()
+            } else {
+                pendingForm.submit()
+            }
+            closeConfirm()
+        })
+    }
+    const bindConfirmations = (root = document) => {
+        root.querySelectorAll("form[data-confirm-form]").forEach((form) => {
+            if (form.dataset.confirmBound) return
+            form.dataset.confirmBound = "1"
+            form.addEventListener("submit", (event) => {
+                if (form.dataset.confirmed === "1") return
+                if (!form.reportValidity()) {
+                    event.preventDefault()
+                    return
+                }
+                event.preventDefault()
+                openConfirm(form)
+            })
+        })
+    }
+    const manageModal = document.querySelector("[data-manage-modal]")
+    const manageForm = manageModal ? manageModal.querySelector("form") : null
+    const manageCancel = manageModal ? manageModal.querySelector("[data-manage-cancel]") : null
+    const manageIdInput = manageModal ? manageModal.querySelector("[data-strategy-id-input]") : null
+    const manageAvailableQuote = manageModal ? manageModal.querySelector("[data-available-quote]") : null
+    const openManage = (button) => {
+        if (!manageModal || !manageForm) return
+        const strategyId = button.dataset.strategyId || ""
+        const name = button.dataset.strategyName || "Strategy"
+        const asset = button.dataset.asset || ""
+        const exchangeName = button.dataset.exchangeName || ""
+        const quote = button.dataset.quoteCurrency || "USDC"
+        const exchangeAvailable = Number(button.dataset.exchangeAvailable || 0)
+        const reduceMax = Number(button.dataset.reduceMax || 0)
+        manageForm.dataset.addMax = exchangeAvailable.toString()
+        manageForm.dataset.removeMax = reduceMax.toString()
+        manageForm.dataset.addAvailable = formatNumber(exchangeAvailable)
+        manageForm.dataset.removeAvailable = formatNumber(reduceMax)
+        manageForm.dataset.strategyName = name
+        manageForm.dataset.asset = asset
+        manageForm.dataset.exchangeName = exchangeName
+        manageForm.dataset.quoteCurrency = quote
+        if (manageIdInput) manageIdInput.value = strategyId
+        if (manageAvailableQuote) manageAvailableQuote.textContent = quote
+        applyToggleState(manageForm, manageForm.dataset.action || "add")
+        manageModal.classList.remove("hidden")
+        manageModal.classList.add("flex")
+    }
+    const closeManage = () => {
+        if (!manageModal) return
+        manageModal.classList.add("hidden")
+        manageModal.classList.remove("flex")
+    }
     let activeView = "current"
     setupClosedTableSorting()
     fetch(url)
@@ -579,46 +803,41 @@
             }
             const totalBalance = data.total_balance_usdc ?? metrics.current_capital_usdc ?? 0
             const currentBalance = data.current_balance_usdc ?? metrics.current_capital_usdc ?? 0
-            setText("metric-current-card", `${currentBalance.toFixed(2)} USDC`)
-            setText("metric-apr", `${(metrics.apr_percent || 0).toFixed(2)}%`)
+            setText("metric-current-card", formatUsd(currentBalance))
+            setText("metric-apr", formatSignedPercent(metrics.apr_percent || 0))
             const pnlEl = document.getElementById("metric-pnl")
             if (pnlEl) {
                 const pnl = metrics.pnl_usdc || 0
-                pnlEl.textContent = `${pnl.toFixed(2)} USDC`
-                pnlEl.classList.toggle("text-green-700", pnl >= 0)
-                pnlEl.classList.toggle("text-red-700", pnl < 0)
-            }
-            const feesEl = document.getElementById("metric-fees")
-            if (feesEl) {
-                const fees = metrics.fees_usdc || 0
-                feesEl.textContent = `${fees.toFixed(2)} USDC`
-                feesEl.classList.remove("text-green-700", "text-red-700")
+                pnlEl.textContent = formatSignedUsd(pnl)
+                pnlEl.classList.toggle("metric-positive", pnl > 0)
+                pnlEl.classList.toggle("metric-negative", pnl < 0)
             }
             const aprEl = document.getElementById("metric-apr")
             if (aprEl) {
                 const apr = metrics.apr_percent || 0
-                aprEl.classList.toggle("text-red-700", apr < 0)
+                aprEl.classList.toggle("metric-positive", apr > 0)
+                aprEl.classList.toggle("metric-negative", apr < 0)
             }
             const historical = data.historical_metrics || {}
             setText("historical-count", `${historical.count ?? 0}`)
             const historicalPnl = historical.pnl_usdc || 0
-            setText("historical-pnl", `${historicalPnl.toFixed(2)} USDC`)
+            setText("historical-pnl", formatUsd(historicalPnl))
             const historicalApr = historical.apr_percent || 0
             setText("historical-apr", `${historicalApr.toFixed(2)}%`)
             const historicalFees = historical.fees_usdc || 0
-            setText("historical-fees", `${historicalFees.toFixed(2)} USDC`)
+            setText("historical-fees", formatUsd(historicalFees))
             const historicalPnlEl = document.getElementById("historical-pnl")
             if (historicalPnlEl) {
-                historicalPnlEl.classList.toggle("text-green-700", historicalPnl >= 0)
-                historicalPnlEl.classList.toggle("text-red-700", historicalPnl < 0)
+                historicalPnlEl.classList.toggle("metric-positive", historicalPnl >= 0)
+                historicalPnlEl.classList.toggle("metric-negative", historicalPnl < 0)
             }
             const historicalAprEl = document.getElementById("historical-apr")
             if (historicalAprEl) {
-                historicalAprEl.classList.toggle("text-red-700", historicalApr < 0)
+                historicalAprEl.classList.toggle("metric-negative", historicalApr < 0)
             }
             const historicalFeesEl = document.getElementById("historical-fees")
             if (historicalFeesEl) {
-                historicalFeesEl.classList.remove("text-green-700", "text-red-700")
+                historicalFeesEl.classList.remove("metric-positive", "metric-negative")
             }
             document.querySelectorAll(".loading-text").forEach((el) => el.classList.remove("loading-text"))
             const selectedId = data.selected_strategy ? data.selected_strategy.id : null
@@ -630,15 +849,24 @@
                 dates: data.equity_dates || [],
                 selectedId,
             })
-            renderChart({
-                prefix: "historical-equity",
-                series: data.historical_series || [],
-                min: data.historical_min ?? 0,
-                max: data.historical_max ?? 0,
-                dates: data.historical_dates || [],
-                selectedId: null,
-            })
         })
+    bindMaxButtons()
+    bindAmountForms()
+    bindSubmitFeedback()
+    bindConfirmations()
+    document.querySelectorAll("[data-manage-open]").forEach((button) => {
+        if (button.dataset.manageBound) return
+        button.dataset.manageBound = "1"
+        button.addEventListener("click", () => openManage(button))
+    })
+    if (manageCancel) {
+        manageCancel.addEventListener("click", () => closeManage())
+    }
+    if (manageModal) {
+        manageModal.addEventListener("click", (event) => {
+            if (event.target === manageModal) closeManage()
+        })
+    }
     const viewContainer = document.querySelector("[data-dashboard-views]")
     if (viewContainer) {
         const panels = Array.from(viewContainer.querySelectorAll("[data-view-panel]"))

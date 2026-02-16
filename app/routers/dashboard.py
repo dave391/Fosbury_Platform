@@ -31,7 +31,12 @@ async def dashboard(
 ):
     strategy_id = _parse_int(request.query_params.get("strategy_id"))
     service = DashboardService(db)
-    data = await service.get_dashboard_data(user_id, strategy_id)
+    data = await service.get_dashboard_data(
+        user_id,
+        strategy_id,
+        include_equity_series=False,
+        include_historical_series=False,
+    )
     return templates.TemplateResponse("dashboard.html", {"request": request, **data})
 
 
@@ -43,7 +48,12 @@ async def dashboard_data(
 ):
     strategy_id = _parse_int(request.query_params.get("strategy_id"))
     service = DashboardService(db)
-    data = await service.get_dashboard_data(user_id, strategy_id)
+    data = await service.get_dashboard_data(
+        user_id,
+        strategy_id,
+        include_equity_series=True,
+        include_historical_series=False,
+    )
     selected_strategy = data.get("selected_strategy")
     return JSONResponse(
         {
@@ -55,10 +65,6 @@ async def dashboard_data(
             "equity_max": data.get("equity_max"),
             "equity_dates": data.get("equity_dates"),
             "historical_metrics": data.get("historical_metrics"),
-            "historical_series": data.get("historical_series"),
-            "historical_min": data.get("historical_min"),
-            "historical_max": data.get("historical_max"),
-            "historical_dates": data.get("historical_dates"),
             "selected_strategy": {
                 "id": selected_strategy.id,
                 "asset": selected_strategy.asset,

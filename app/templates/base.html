@@ -11,36 +11,45 @@
 </head>
 <body class="antialiased">
     <main class="min-h-screen">
-        {% block body %}
-            <header class="border-b-2 border-black">
-                <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-                    <a href="/" class="flex items-center gap-2">
-                        <img src="/static/logo.png" alt="Fosbury Platform" class="sidebar-logo">
-                        <span class="text-[1.125rem] font-semibold uppercase tracking-[0.12em]">FOSBURY PLATFORM</span>
-                    </a>
-                    <nav class="flex items-center gap-2">
-                        {% if request.url.path == "/login" %}
+        <nav class="app-nav">
+            <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
+                <a href="/dashboard" class="flex items-center gap-2">
+                    <img src="/static/logo_dark.png" alt="Fosbury Platform" class="sidebar-logo">
+                    <span class="text-[1.125rem] font-semibold uppercase tracking-[0.12em]">FOSBURY PLATFORM</span>
+                </a>
+                <div class="flex flex-wrap items-center justify-end gap-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                        {% if request.url.path in ["/login", "/register", "/"] %}
+                            <a href="/login" class="nav-link{% if request.url.path == '/login' %} nav-link-active{% endif %}">Log in</a>
+                            <a href="/register" class="nav-link{% if request.url.path == '/register' %} nav-link-active{% endif %}">Sign up</a>
                         {% else %}
-                            {% if request.url.path == "/" %}
-                                <a href="/login" class="nav-link">Log in</a>
-                                <a href="/register" class="nav-link">Sign up</a>
-                            {% else %}
-                                <a href="/" class="nav-link">Home</a>
-                                <a href="/login" class="nav-link">Log in</a>
-                                <a href="/register" class="nav-link">Sign up</a>
-                                <a href="/dashboard" class="nav-link">Dashboard</a>
-                                <a href="/strategy" class="nav-link">Strategy</a>
-                                <a href="/config" class="nav-link">Exchanges</a>
-                                <a href="/logout" class="nav-link nav-link-danger">Log out</a>
-                            {% endif %}
+                            <a href="/dashboard" class="nav-link{% if request.url.path == '/dashboard' %} nav-link-active{% endif %}">Dashboard</a>
+                            <a href="/strategy" class="nav-link{% if request.url.path == '/strategy' %} nav-link-active{% endif %}">Strategy</a>
+                            <a href="/config" class="nav-link{% if request.url.path == '/config' %} nav-link-active{% endif %}">Exchanges</a>
+                            <a href="/logout" class="nav-link nav-link-danger">Log out</a>
                         {% endif %}
-                    </nav>
+                    </div>
+                    {% if request.url.path not in ["/login", "/register", "/"] %}
+                    <div class="flex items-center gap-3">
+                        <button type="button" class="relative text-black/60 hover:text-black">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span class="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-purple-600"></span>
+                        </button>
+                        <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-700 to-purple-400 text-white">
+                            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    {% endif %}
                 </div>
-            </header>
-            <div class="mx-auto max-w-5xl px-4 py-6">
-                {% block content %}{% endblock %}
             </div>
-        {% endblock %}
+        </nav>
+        <div class="mx-auto w-full max-w-7xl px-6 pb-8 app-content">
+            {% block content %}{% endblock %}
+        </div>
     </main>
 </body>
 </html>
