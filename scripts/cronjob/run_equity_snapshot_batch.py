@@ -18,7 +18,6 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
     snapshot_day = snapshot_date or (date.today() - timedelta(days=1))
     start_dt = datetime.combine(snapshot_day, time.min, tzinfo=timezone.utc)
     end_dt = start_dt + timedelta(days=1)
-    start_ms = int(start_dt.timestamp() * 1000)
     end_ms = int(end_dt.timestamp() * 1000)
     run_id = uuid4().hex
     debug = os.getenv("CRON_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
@@ -98,8 +97,17 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
                         )
                         existing = existing_result.scalars().first()
 
+                        strategy_start = strategy.created_at
+                        if strategy_start and strategy_start.tzinfo is None:
+                            strategy_start = strategy_start.replace(tzinfo=timezone.utc)
+                        effective_start_dt = start_dt
+                        if strategy_start and strategy_start > effective_start_dt:
+                            effective_start_dt = strategy_start
+                        if effective_start_dt >= end_dt:
+                            continue
+                        effective_start_ms = int(effective_start_dt.timestamp() * 1000)
                         funding_delta, fees_delta = await adapter.fetch_strategy_deltas(
-                            exchange, strategy, start_ms, end_ms
+                            exchange, strategy, effective_start_ms, end_ms
                         )
 
                         last_result = await db.execute(

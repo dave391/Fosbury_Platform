@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.routers.shared import get_user_email
 from app.routers.shared import require_user_id_api_dep
 from app.routers.shared import require_user_id_html_dep
 from app.routers.shared import templates
@@ -31,8 +32,17 @@ async def dashboard(
 ):
     strategy_id = _parse_int(request.query_params.get("strategy_id"))
     service = DashboardService(db)
-    data = await service.get_dashboard_data(user_id, strategy_id)
-    return templates.TemplateResponse("dashboard.html", {"request": request, **data})
+    data = await service.get_dashboard_data(
+        user_id,
+        strategy_id,
+        include_equity_series=False,
+        include_historical_series=False,
+    )
+    user_email = await get_user_email(user_id, db)
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {"request": request, "user_email": user_email, **data},
+    )
 
 
 @router.get("/dashboard/data")
@@ -43,7 +53,12 @@ async def dashboard_data(
 ):
     strategy_id = _parse_int(request.query_params.get("strategy_id"))
     service = DashboardService(db)
-    data = await service.get_dashboard_data(user_id, strategy_id)
+    data = await service.get_dashboard_data(
+        user_id,
+        strategy_id,
+        include_equity_series=True,
+        include_historical_series=False,
+    )
     selected_strategy = data.get("selected_strategy")
     return JSONResponse(
         {
@@ -55,10 +70,6 @@ async def dashboard_data(
             "equity_max": data.get("equity_max"),
             "equity_dates": data.get("equity_dates"),
             "historical_metrics": data.get("historical_metrics"),
-            "historical_series": data.get("historical_series"),
-            "historical_min": data.get("historical_min"),
-            "historical_max": data.get("historical_max"),
-            "historical_dates": data.get("historical_dates"),
             "selected_strategy": {
                 "id": selected_strategy.id,
                 "asset": selected_strategy.asset,

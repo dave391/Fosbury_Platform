@@ -84,7 +84,6 @@ class DashboardService:
             "current_capital_usdc": 0.0,
             "pnl_usdc": 0.0,
             "apr_percent": 0.0,
-            "fees_usdc": 0.0,
         }
         if not active_strategies:
             return metrics
@@ -107,7 +106,6 @@ class DashboardService:
         if selected_strategy and selected_strategy.id in strategy_stats:
             metrics["current_capital_usdc"] = strategy_stats[selected_strategy.id]["current_capital"]
             metrics["pnl_usdc"] = strategy_stats[selected_strategy.id]["pnl_usdc"]
-            metrics["fees_usdc"] = strategy_stats[selected_strategy.id]["fees_usdc"]
             if metrics["allocated_capital_usdc"] > 0 and metrics["days_active"] > 0:
                 metrics["apr_percent"] = (metrics["pnl_usdc"] / metrics["allocated_capital_usdc"]) * (
                     365 / metrics["days_active"]
@@ -115,7 +113,6 @@ class DashboardService:
         elif not selected_strategy:
             metrics["current_capital_usdc"] = sum(stat["current_capital"] for stat in strategy_stats.values())
             metrics["pnl_usdc"] = sum(stat["pnl_usdc"] for stat in strategy_stats.values())
-            metrics["fees_usdc"] = sum(stat["fees_usdc"] for stat in strategy_stats.values())
             if metrics["allocated_capital_usdc"] > 0 and metrics["days_active"] > 0:
                 metrics["apr_percent"] = (metrics["pnl_usdc"] / metrics["allocated_capital_usdc"]) * (
                     365 / metrics["days_active"]
@@ -138,29 +135,15 @@ class DashboardService:
         self,
         active_strategies: List[Any],
         selected_strategy,
-        scope_strategies: List[Any],
         all_equity_snapshots: List[Any],
     ):
-        equity_snapshots = []
-        aggregate_snapshots = []
         equity_series = []
         equity_min = 0.0
         equity_max = 0.0
         equity_dates = []
 
-        if scope_strategies:
-            strategy_ids = [strategy.id for strategy in scope_strategies]
-            equity_snapshots = await self.strategy_service.get_equity_snapshots(strategy_ids)
-
         if not all_equity_snapshots:
-            return (
-                equity_snapshots,
-                aggregate_snapshots,
-                equity_series,
-                equity_min,
-                equity_max,
-                equity_dates,
-            )
+            return equity_series, equity_min, equity_max, equity_dates
 
         grouped_deltas = {}
         for snap in all_equity_snapshots:
@@ -223,8 +206,6 @@ class DashboardService:
                 aggregate_balance, series_values = self._shift_series(aggregate_balance, series_values)
                 if series_values:
                     balance_values.extend(series_values)
-                aggregate_snapshots = aggregate_balance
-
             equity_dates = [chart_min_date.isoformat(), chart_max_date.isoformat()]
             aggregate_chart = self.build_equity_chart(
                 aggregate_balance,
@@ -282,9 +263,9 @@ class DashboardService:
             series["chart"]["min"] = equity_min
             series["chart"]["max"] = equity_max
 
-        return equity_snapshots, aggregate_snapshots, equity_series, equity_min, equity_max, equity_dates
+        return equity_series, equity_min, equity_max, equity_dates
 
-    async def _build_historical_data(self, closed_strategies: List[Any]):
+    async def _build_historical_data(self, closed_strategies: List[Any], include_series: bool = True):
         closed_rows = []
         historical_metrics = {
             "count": 0,
@@ -339,7 +320,7 @@ class DashboardService:
             stats["funding_total"] += snap.funding_delta_usdc or 0.0
             stats["fees_total"] += snap.fees_delta_usdc or 0.0
 
-        cumulative_by_date = {}
+        cumulative_by_date = {} if include_series else None
 
         for strategy in closed_strategies:
             closure = closure_by_id.get(strategy.id)
@@ -381,9 +362,10 @@ class DashboardService:
                 }
             )
 
-            closed_date = closed_at.date()
-            cumulative_by_date.setdefault(closed_date, 0.0)
-            cumulative_by_date[closed_date] += pnl_usdc
+            if include_series:
+                closed_date = closed_at.date()
+                cumulative_by_date.setdefault(closed_date, 0.0)
+                cumulative_by_date[closed_date] += pnl_usdc
 
             historical_metrics["count"] += 1
             historical_metrics["pnl_usdc"] += pnl_usdc
@@ -397,7 +379,7 @@ class DashboardService:
             else:
                 historical_metrics["apr_percent"] = 0.0
 
-        if cumulative_by_date:
+        if include_series and cumulative_by_date:
             balance_snaps = []
             cumulative_total = 0.0
             series_values = []
@@ -433,14 +415,20 @@ class DashboardService:
             historical_dates,
         )
 
-    async def get_dashboard_data(self, user_id: int, filter_strategy_id: Optional[int] = None) -> Dict[str, Any]:
+    async def get_dashboard_data(
+        self,
+        user_id: int,
+        filter_strategy_id: Optional[int] = None,
+        include_equity_series: bool = True,
+        include_historical_series: bool = True,
+    ) -> Dict[str, Any]:
+        connected_exchanges = await self.strategy_service.get_connected_exchange_names(user_id)
+        has_credentials = bool(connected_exchanges)
         active_strategies = await self.strategy_service.get_active_strategies(user_id)
         today = date.today()
         selected_strategy = self._resolve_selected_strategy(active_strategies, filter_strategy_id)
         metrics = self._build_base_metrics(active_strategies, selected_strategy, today)
         active_rows = []
-        equity_snapshots = []
-        aggregate_snapshots = []
         equity_series = []
         equity_min = 0.0
         equity_max = 0.0
@@ -451,7 +439,6 @@ class DashboardService:
 
         if has_active:
             all_strategy_ids = [strategy.id for strategy in active_strategies]
-            all_equity_snapshots = await self.strategy_service.get_equity_snapshots(all_strategy_ids)
             rows_data = await self.strategy_service.build_active_strategy_rows(
                 user_id,
                 active_strategies,
@@ -460,19 +447,18 @@ class DashboardService:
             active_rows = rows_data.get("rows", [])
             strategy_stats = rows_data.get("strategy_stats", {})
             metrics = self._apply_current_metrics(metrics, selected_strategy, strategy_stats)
-            (
-                equity_snapshots,
-                aggregate_snapshots,
-                equity_series,
-                equity_min,
-                equity_max,
-                equity_dates,
-            ) = await self._build_equity_data(
-                active_strategies,
-                selected_strategy,
-                scope_strategies,
-                all_equity_snapshots,
-            )
+            if include_equity_series:
+                all_equity_snapshots = await self.strategy_service.get_equity_snapshots(all_strategy_ids)
+                (
+                    equity_series,
+                    equity_min,
+                    equity_max,
+                    equity_dates,
+                ) = await self._build_equity_data(
+                    active_strategies,
+                    selected_strategy,
+                    all_equity_snapshots,
+                )
         
         table_rows = active_rows
         if selected_strategy:
@@ -492,7 +478,7 @@ class DashboardService:
             historical_min,
             historical_max,
             historical_dates,
-        ) = await self._build_historical_data(closed_strategies)
+        ) = await self._build_historical_data(closed_strategies, include_series=include_historical_series)
 
         return {
             "user_id": user_id,
@@ -503,12 +489,12 @@ class DashboardService:
             "total_balance_usdc": total_balance_usdc,
             "current_balance_usdc": current_balance_usdc,
             "equity_chart": equity_series[0]["chart"] if equity_series else self.build_equity_chart([]),
-            "equity_snapshots": aggregate_snapshots if aggregate_snapshots else equity_snapshots,
             "equity_series": equity_series,
             "equity_min": equity_min,
             "equity_max": equity_max,
             "equity_dates": equity_dates,
             "has_active": has_active,
+            "has_credentials": has_credentials,
             "strategy_filter_id": selected_strategy.id if selected_strategy else None,
             "historical_rows": closed_rows,
             "historical_metrics": historical_metrics,

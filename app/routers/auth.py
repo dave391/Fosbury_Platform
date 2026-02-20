@@ -23,10 +23,11 @@ async def register_user(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    confirm_password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
     service = UserService(db)
-    _, error = await service.create_user(email, password)
+    _, error = await service.create_user(email, password, confirm_password)
 
     if error:
         return templates.TemplateResponse(
@@ -74,4 +75,3 @@ async def logout():
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie("session")
     return response
-

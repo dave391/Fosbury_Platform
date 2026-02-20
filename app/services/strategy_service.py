@@ -162,10 +162,9 @@ class StrategyService:
             for snap in snapshot_result.scalars().all():
                 stats = snapshot_stats.setdefault(
                     snap.strategy_id,
-                    {"pnl_usdc": 0.0, "fees_usdc": 0.0, "last_snapshot": None},
+                    {"pnl_usdc": 0.0, "last_snapshot": None},
                 )
                 stats["pnl_usdc"] += (snap.funding_delta_usdc or 0.0) - (snap.fees_delta_usdc or 0.0)
-                stats["fees_usdc"] += snap.fees_delta_usdc or 0.0
                 stats["last_snapshot"] = snap
 
         for row in rows:
@@ -174,11 +173,9 @@ class StrategyService:
             if snap:
                 current_capital = snap.equity_usdc
                 pnl_usdc = stats["pnl_usdc"] if stats else 0.0
-                fees_usdc = stats["fees_usdc"] if stats else 0.0
             else:
                 current_capital = row["allocated_capital_usdc"]
                 pnl_usdc = 0.0
-                fees_usdc = 0.0
             row["current_capital_usdc"] = current_capital
             row["reduce_max_usdc"] = max(0.0, current_capital - 1)
             if row["allocated_capital_usdc"] > 0 and row["days_active"] > 0:
@@ -188,7 +185,6 @@ class StrategyService:
             strategy_stats[row["id"]] = {
                 "pnl_usdc": pnl_usdc,
                 "current_capital": current_capital,
-                "fees_usdc": fees_usdc,
             }
 
         return {"rows": rows, "strategy_stats": strategy_stats}

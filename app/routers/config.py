@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.routers.shared import get_user_email
 from app.routers.shared import require_user_id_api_dep
 from app.routers.shared import require_user_id_html_dep
 from app.routers.shared import templates
@@ -23,11 +24,16 @@ async def config_page(
     user_id: int = Depends(require_user_id_html_dep),
     db: AsyncSession = Depends(get_db),
 ):
+    service = ExchangeService(db)
+    user_email = await get_user_email(user_id, db)
+    credentials = await service.get_configured_exchanges(user_id)
     return templates.TemplateResponse(
         "config.html",
         {
             "request": request,
             "user_id": user_id,
+            "user_email": user_email,
+            "has_credentials": bool(credentials),
             "credentials": [],
             "exchanges": [e.value for e in ExchangeName],
         },
@@ -55,6 +61,7 @@ async def save_config(
     db: AsyncSession = Depends(get_db),
 ):
     service = ExchangeService(db)
+    user_email = await get_user_email(user_id, db)
     try:
         await service.save_credentials(user_id, api_key, api_secret, exchange_name)
         msg = "Keys verified and saved successfully!"
@@ -72,6 +79,8 @@ async def save_config(
             "request": request,
             "msg": msg,
             "success": success,
+            "user_email": user_email,
+            "has_credentials": bool(await service.get_configured_exchanges(user_id)),
             "credentials": [],
             "exchanges": [e.value for e in ExchangeName],
         },
