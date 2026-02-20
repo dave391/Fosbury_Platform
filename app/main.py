@@ -31,6 +31,10 @@ async def session_refresh_middleware(request: Request, call_next):
     token = request.cookies.get("session")
     user_id = decode_session_token(token) if token else None
     response = await call_next(request)
+    if request.url.path in ("/login", "/logout", "/register"):
+        if token and not user_id:
+            response.delete_cookie("session")
+        return response
     if token and user_id:
         refreshed = create_session_token(user_id)
         response.set_cookie(

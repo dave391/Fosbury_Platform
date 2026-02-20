@@ -23,15 +23,15 @@ class UserService:
         if password != confirm_password:
             return "Passwords do not match"
         if len(password) < 8:
-            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+            return "Use at least 8 characters, including at least one uppercase letter, numbers, and a special character (@, &, £, !, etc.)"
         if not re.search(r"[A-Z]", password):
-            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+            return "Use at least 8 characters, including at least one uppercase letter, numbers, and a special character (@, &, £, !, etc.)"
         if not re.search(r"[a-z]", password):
-            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+            return "Use at least 8 characters, including at least one uppercase letter, numbers, and a special character (@, &, £, !, etc.)"
         if not re.search(r"[0-9]", password):
-            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+            return "Use at least 8 characters, including at least one uppercase letter, numbers, and a special character (@, &, £, !, etc.)"
         if not re.search(r"[^A-Za-z0-9]", password):
-            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+            return "Use at least 8 characters, including at least one uppercase letter, numbers, and a special character (@, &, £, !, etc.)"
         return None
 
     async def create_user(self, email: str, password: str, confirm_password: str) -> Tuple[Optional[User], str]:
