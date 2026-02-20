@@ -12,6 +12,7 @@ from app.routers.shared import UnauthorizedAPI
 from app.routers.shared import UnauthorizedHTML
 from app.routes import router
 from core.config import settings
+from core.security import create_session_token, decode_session_token
 
 
 docs_enabled = settings.EXPOSE_DOCS
@@ -23,6 +24,24 @@ app = FastAPI(
 )
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(router)
+
+
+@app.middleware("http")
+async def session_refresh_middleware(request: Request, call_next):
+    token = request.cookies.get("session")
+    user_id = decode_session_token(token) if token else None
+    response = await call_next(request)
+    if token and user_id:
+        refreshed = create_session_token(user_id)
+        response.set_cookie(
+            key="session",
+            value=refreshed,
+            httponly=True,
+            samesite="lax",
+        )
+    elif token and not user_id:
+        response.delete_cookie("session")
+    return response
 
 
 @app.middleware("http")

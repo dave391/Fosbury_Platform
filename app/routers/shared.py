@@ -15,6 +15,13 @@ def get_current_user_id(request: Request, db: AsyncSession) -> Optional[int]:
     return UserService(db).get_current_user_id(request)
 
 
+async def get_user_email(user_id: int, db: AsyncSession) -> Optional[str]:
+    user = await UserService(db).get_user_by_id(user_id)
+    if not user:
+        return None
+    return user.email
+
+
 class UnauthorizedHTML(Exception):
     pass
 

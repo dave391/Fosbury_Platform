@@ -24,24 +24,38 @@
                             <a href="/register" class="nav-link{% if request.url.path == '/register' %} nav-link-active{% endif %}">Sign up</a>
                         {% else %}
                             <a href="/dashboard" class="nav-link{% if request.url.path == '/dashboard' %} nav-link-active{% endif %}">Dashboard</a>
-                            <a href="/strategy" class="nav-link{% if request.url.path == '/strategy' %} nav-link-active{% endif %}">Strategy</a>
+                            {% if has_credentials is defined and not has_credentials %}
+                                <span class="nav-link opacity-50 pointer-events-none">Strategy</span>
+                            {% else %}
+                                <a href="/strategy" class="nav-link{% if request.url.path == '/strategy' %} nav-link-active{% endif %}">Strategy</a>
+                            {% endif %}
                             <a href="/config" class="nav-link{% if request.url.path == '/config' %} nav-link-active{% endif %}">Exchanges</a>
-                            <a href="/logout" class="nav-link nav-link-danger">Log out</a>
                         {% endif %}
                     </div>
                     {% if request.url.path not in ["/login", "/register", "/"] %}
-                    <div class="flex items-center gap-3">
-                        <button type="button" class="relative text-black/60 hover:text-black">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span class="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-purple-600"></span>
-                        </button>
-                        <button type="button" class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-purple-700 to-purple-400 text-white">
+                    <div class="relative ml-4">
+                        <button
+                            type="button"
+                            class="flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(131,91,254,1)] text-white"
+                            data-profile-toggle
+                            aria-haspopup="true"
+                            aria-expanded="false"
+                        >
                             <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
                             </svg>
                         </button>
+                        <div class="absolute right-0 mt-2 hidden min-w-[220px] card-surface p-2" data-profile-menu>
+                            <div class="px-3 py-2 text-[0.65rem] uppercase tracking-wider text-white/60">
+                                {{ user_email or "" }}
+                            </div>
+                            <a
+                                href="/logout"
+                                class="block px-3 py-2 text-[0.65rem] uppercase tracking-wider rounded-md text-red-300 hover:bg-[color:var(--accent-soft)]"
+                            >
+                                Log out
+                            </a>
+                        </div>
                     </div>
                     {% endif %}
                 </div>
@@ -51,5 +65,52 @@
             {% block content %}{% endblock %}
         </div>
     </main>
+    <script>
+        document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+            const wrapper = button.closest("div")
+            const input = wrapper ? wrapper.querySelector("[data-password-input]") : null
+            if (!input) return
+            const openIcon = button.querySelector("[data-eye-open]")
+            const closedIcon = button.querySelector("[data-eye-closed]")
+            button.addEventListener("click", () => {
+                const isHidden = input.type === "password"
+                input.type = isHidden ? "text" : "password"
+                button.setAttribute("aria-pressed", isHidden ? "true" : "false")
+                button.setAttribute("aria-label", isHidden ? "Hide password" : "Show password")
+                if (openIcon && closedIcon) {
+                    openIcon.classList.toggle("hidden", isHidden)
+                    closedIcon.classList.toggle("hidden", !isHidden)
+                }
+            })
+        })
+        const profileToggle = document.querySelector("[data-profile-toggle]")
+        const profileMenu = document.querySelector("[data-profile-menu]")
+        if (profileToggle && profileMenu) {
+            const closeMenu = () => {
+                profileMenu.classList.add("hidden")
+                profileToggle.setAttribute("aria-expanded", "false")
+            }
+            const toggleMenu = () => {
+                const isHidden = profileMenu.classList.contains("hidden")
+                profileMenu.classList.toggle("hidden", !isHidden)
+                profileToggle.setAttribute("aria-expanded", isHidden ? "true" : "false")
+            }
+            profileToggle.addEventListener("click", (event) => {
+                event.stopPropagation()
+                toggleMenu()
+            })
+            profileMenu.addEventListener("click", (event) => {
+                event.stopPropagation()
+            })
+            document.addEventListener("click", () => {
+                closeMenu()
+            })
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") {
+                    closeMenu()
+                }
+            })
+        }
+    </script>
 </body>
 </html>

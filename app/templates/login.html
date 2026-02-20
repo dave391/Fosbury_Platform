@@ -28,14 +28,34 @@
                 </div>
                 <div>
                     <label for="password" class="block text-xs uppercase tracking-wider">Password</label>
-                    <input
-                        id="password"
-                        name="password"
-                        type="password"
-                        required
-                        class="mt-1 block w-full input"
-                        placeholder="Password"
-                    >
+                    <div class="relative">
+                        <input
+                            id="password"
+                            name="password"
+                            type="password"
+                            required
+                            class="mt-1 block w-full input pr-12"
+                            placeholder="Password"
+                            data-password-input
+                        >
+                        <button
+                            type="button"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-[color:var(--ink-soft)] hover:text-[color:var(--ink)]"
+                            data-password-toggle
+                            aria-label="Show password"
+                            aria-pressed="false"
+                        >
+                            <svg class="h-5 w-5" data-eye-open fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <svg class="h-5 w-5 hidden" data-eye-closed fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M4 4l16 16" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
 

@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.routers.shared import get_user_email
 from app.routers.shared import require_user_id_api_dep
 from app.routers.shared import require_user_id_html_dep
 from app.routers.shared import templates
@@ -37,7 +38,11 @@ async def dashboard(
         include_equity_series=False,
         include_historical_series=False,
     )
-    return templates.TemplateResponse("dashboard.html", {"request": request, **data})
+    user_email = await get_user_email(user_id, db)
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {"request": request, "user_email": user_email, **data},
+    )
 
 
 @router.get("/dashboard/data")

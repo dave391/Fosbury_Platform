@@ -14,6 +14,7 @@
 </div>
 {% endif %}
 
+{% if has_credentials %}
 <div class="mt-4">
     <div class="mb-3 section-title">Start new strategy</div>
     <p class="mt-3 text-sm font-editorial loading-text" id="strategy-loading">Loading</p>
@@ -507,4 +508,5 @@
     const capitalInput = document.querySelector("[data-capital-input]")
     if (capitalInput) capitalInput.addEventListener("input", updateAllocation)
 </script>
+{% endif %}
 {% endblock %}

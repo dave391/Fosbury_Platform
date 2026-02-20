@@ -422,6 +422,8 @@ class DashboardService:
         include_equity_series: bool = True,
         include_historical_series: bool = True,
     ) -> Dict[str, Any]:
+        connected_exchanges = await self.strategy_service.get_connected_exchange_names(user_id)
+        has_credentials = bool(connected_exchanges)
         active_strategies = await self.strategy_service.get_active_strategies(user_id)
         today = date.today()
         selected_strategy = self._resolve_selected_strategy(active_strategies, filter_strategy_id)
@@ -492,6 +494,7 @@ class DashboardService:
             "equity_max": equity_max,
             "equity_dates": equity_dates,
             "has_active": has_active,
+            "has_credentials": has_credentials,
             "strategy_filter_id": selected_strategy.id if selected_strategy else None,
             "historical_rows": closed_rows,
             "historical_metrics": historical_metrics,

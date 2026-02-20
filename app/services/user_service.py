@@ -1,9 +1,10 @@
 from fastapi import Request
+import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from core.models import User
-from core.security import get_password_hash, verify_password, encrypt_data, decrypt_data
+from core.security import get_password_hash, verify_password, create_session_token, decode_session_token
 from typing import Optional, Tuple
 
 class UserService:
@@ -18,11 +19,29 @@ class UserService:
         result = await self.db.execute(select(User).where(User.id == user_id))
         return result.scalars().first()
 
-    async def create_user(self, email: str, password: str) -> Tuple[Optional[User], str]:
+    def _password_error(self, password: str, confirm_password: str) -> Optional[str]:
+        if password != confirm_password:
+            return "Passwords do not match"
+        if len(password) < 8:
+            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+        if not re.search(r"[A-Z]", password):
+            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+        if not re.search(r"[a-z]", password):
+            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+        if not re.search(r"[0-9]", password):
+            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+        if not re.search(r"[^A-Za-z0-9]", password):
+            return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+        return None
+
+    async def create_user(self, email: str, password: str, confirm_password: str) -> Tuple[Optional[User], str]:
         """
         Creates a new user. Returns (User, error_message).
         If successful, error_message is None.
         """
+        password_error = self._password_error(password, confirm_password)
+        if password_error:
+            return None, password_error
         existing_user = await self.get_user_by_email(email)
         if existing_user:
             return None, "Email already registered"
@@ -45,15 +64,10 @@ class UserService:
         return user
 
     def create_session_token(self, user_id: int) -> str:
-        return encrypt_data(str(user_id))
+        return create_session_token(user_id)
 
     def get_user_id_from_token(self, token: str) -> Optional[int]:
-        if not token:
-            return None
-        try:
-            return int(decrypt_data(token))
-        except Exception:
-            return None
+        return decode_session_token(token)
 
     def get_current_user_id(self, request: Request) -> Optional[int]:
         token = request.cookies.get("session")

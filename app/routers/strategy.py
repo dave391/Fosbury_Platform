@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.routers.shared import get_user_email
 from app.routers.shared import require_user_id_api_dep
 from app.routers.shared import require_user_id_html_dep
 from app.routers.shared import templates
@@ -25,10 +26,12 @@ async def render_strategy_page(
     msg: str = None,
     success: bool = None,
     exchange_name: str = ExchangeName.DERIBIT,
+    user_email: str = None,
 ):
     if isinstance(exchange_name, ExchangeName):
         exchange_name = exchange_name.value
     connected_exchanges = await service.get_connected_exchange_names(user_id)
+    has_credentials = bool(connected_exchanges)
     if connected_exchanges and exchange_name not in connected_exchanges:
         exchange_name = connected_exchanges[0]
     exchanges = connected_exchanges if connected_exchanges else [e.value for e in ExchangeName]
@@ -46,11 +49,12 @@ async def render_strategy_page(
             "msg": msg,
             "success": success,
             "user_id": user_id,
+            "user_email": user_email,
             "active_count": active_count,
             "total_allocated": total_allocated,
             "has_strategies": active_count > 0,
             "usdc_balance": 0.0,
-            "has_credentials": None,
+            "has_credentials": has_credentials,
             "exchange_name": exchange_name,
             "exchanges": exchanges,
             "quote_currency": quote_currency,
@@ -65,8 +69,15 @@ async def strategy_page(
     db: AsyncSession = Depends(get_db),
 ):
     service = StrategyService(db)
+    user_email = await get_user_email(user_id, db)
     exchange_name = request.query_params.get("exchange_name") or ExchangeName.DERIBIT
-    return await render_strategy_page(request, service, user_id, exchange_name=exchange_name)
+    return await render_strategy_page(
+        request,
+        service,
+        user_id,
+        exchange_name=exchange_name,
+        user_email=user_email,
+    )
 
 
 @router.get("/strategy/data")
@@ -114,14 +125,29 @@ async def start_strategy(
     db: AsyncSession = Depends(get_db),
 ):
     service = StrategyService(db)
+    user_email = await get_user_email(user_id, db)
     try:
         await service.start_strategy(user_id, asset, capital_usdc, exchange_name)
         return RedirectResponse(url="/strategy", status_code=303)
     except ValueError as e:
-        return await render_strategy_page(request, service, user_id, str(e), False, exchange_name=exchange_name)
+        return await render_strategy_page(
+            request,
+            service,
+            user_id,
+            str(e),
+            False,
+            exchange_name=exchange_name,
+            user_email=user_email,
+        )
     except Exception:
         return await render_strategy_page(
-            request, service, user_id, "Error starting strategy.", False, exchange_name=exchange_name
+            request,
+            service,
+            user_id,
+            "Error starting strategy.",
+            False,
+            exchange_name=exchange_name,
+            user_email=user_email,
         )
 
 
@@ -134,13 +160,28 @@ async def add_strategy_capital(
     db: AsyncSession = Depends(get_db),
 ):
     service = StrategyService(db)
+    user_email = await get_user_email(user_id, db)
     try:
         await service.add_capital(user_id, strategy_id, added_amount_usdc)
         return RedirectResponse(url="/strategy", status_code=303)
     except ValueError as e:
-        return await render_strategy_page(request, service, user_id, str(e), False)
+        return await render_strategy_page(
+            request,
+            service,
+            user_id,
+            str(e),
+            False,
+            user_email=user_email,
+        )
     except Exception:
-        return await render_strategy_page(request, service, user_id, "Error adding capital.", False)
+        return await render_strategy_page(
+            request,
+            service,
+            user_id,
+            "Error adding capital.",
+            False,
+            user_email=user_email,
+        )
 
 
 @router.post("/strategy/remove")
@@ -152,13 +193,28 @@ async def remove_strategy_capital(
     db: AsyncSession = Depends(get_db),
 ):
     service = StrategyService(db)
+    user_email = await get_user_email(user_id, db)
     try:
         await service.remove_capital(user_id, strategy_id, remove_amount_usdc)
         return RedirectResponse(url="/strategy", status_code=303)
     except ValueError as e:
-        return await render_strategy_page(request, service, user_id, str(e), False)
+        return await render_strategy_page(
+            request,
+            service,
+            user_id,
+            str(e),
+            False,
+            user_email=user_email,
+        )
     except Exception:
-        return await render_strategy_page(request, service, user_id, "Error removing capital.", False)
+        return await render_strategy_page(
+            request,
+            service,
+            user_id,
+            "Error removing capital.",
+            False,
+            user_email=user_email,
+        )
 
 
 @router.post("/strategy/stop")
@@ -169,10 +225,25 @@ async def stop_strategy(
     db: AsyncSession = Depends(get_db),
 ):
     service = StrategyService(db)
+    user_email = await get_user_email(user_id, db)
     try:
         await service.stop_strategy(user_id, strategy_id)
         return RedirectResponse(url="/strategy", status_code=303)
     except ValueError as e:
-        return await render_strategy_page(request, service, user_id, str(e), False)
+        return await render_strategy_page(
+            request,
+            service,
+            user_id,
+            str(e),
+            False,
+            user_email=user_email,
+        )
     except Exception:
-        return await render_strategy_page(request, service, user_id, "Error stopping strategy.", False)
+        return await render_strategy_page(
+            request,
+            service,
+            user_id,
+            "Error stopping strategy.",
+            False,
+            user_email=user_email,
+        )
