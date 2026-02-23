@@ -59,22 +59,31 @@
                     <div class="card-surface p-6">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <h3 class="section-title">Active Strategies</h3>
-                            <form action="/dashboard" method="get" class="flex flex-nowrap items-center gap-2">
-                                <select class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider">
-                                    <option>All Types</option>
-                                </select>
-                                <select class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider">
-                                    <option>All Exchanges</option>
-                                </select>
-                                <select name="strategy_id" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider">
-                                    <option value="">All</option>
-                                {% for s in active_strategies %}
-                                    <option value="{{ s.id }}" {% if strategy_filter_id == s.id %}selected{% endif %}>
-                                        {{ s.name }} · {{ s.asset }} · {{ s.exchange_name|capitalize }}
+                            <form action="/dashboard" method="get" class="flex flex-nowrap items-center gap-2" data-auto-filter>
+                                <select name="strategy_type" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider" data-auto-filter-input>
+                                    <option value="">All Types</option>
+                                    {% for t in strategy_type_options %}
+                                    <option value="{{ t.key }}" {% if strategy_type_filter == t.key %}selected{% endif %}>
+                                        {{ t.label }}
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <button type="submit" class="btn btn-primary px-2 py-1 text-[0.65rem]">Apply</button>
+                                <select name="exchange" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider" data-auto-filter-input>
+                                    <option value="">All Exchanges</option>
+                                    {% for ex in exchange_options %}
+                                    <option value="{{ ex }}" {% if exchange_filter == ex %}selected{% endif %}>
+                                        {{ ex|upper }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <select name="asset" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider" data-auto-filter-input>
+                                    <option value="">All Pairs</option>
+                                    {% for asset in asset_options %}
+                                    <option value="{{ asset }}" {% if asset_filter == asset %}selected{% endif %}>
+                                        {{ asset }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
                             </form>
                         </div>
                         <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -281,8 +290,8 @@
             </div>
 <script>
     const params = new URLSearchParams(window.location.search)
-    const strategyId = params.get("strategy_id")
-    const url = strategyId ? `/dashboard/data?strategy_id=${strategyId}` : "/dashboard/data"
+    const query = params.toString()
+    const url = query ? `/dashboard/data?${query}` : "/dashboard/data"
     const formatUsd = (value) => new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD",
@@ -302,6 +311,15 @@
         return `${formatNumber(0)}%`
     }
     const upper = (value) => String(value || "").toUpperCase()
+    const setupAutoFilters = () => {
+        const form = document.querySelector("[data-auto-filter]")
+        if (!form) return
+        const inputs = Array.from(form.querySelectorAll("[data-auto-filter-input]"))
+        if (!inputs.length) return
+        inputs.forEach((input) => {
+            input.addEventListener("change", () => form.submit())
+        })
+    }
     const setupClosedTableSorting = () => {
         const table = document.getElementById("historical-closed-table")
         const body = document.getElementById("historical-closed-body")
@@ -793,6 +811,7 @@
         manageModal.classList.remove("flex")
     }
     let activeView = "current"
+    setupAutoFilters()
     setupClosedTableSorting()
     fetch(url)
         .then((res) => res.json())

@@ -15,13 +15,11 @@ from core.database import get_db
 router = APIRouter()
 
 
-def _parse_int(value: str):
-    if not value:
+def _parse_str(value: str):
+    if value is None:
         return None
-    try:
-        return int(value)
-    except ValueError:
-        return None
+    value = value.strip()
+    return value or None
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -30,11 +28,15 @@ async def dashboard(
     user_id: int = Depends(require_user_id_html_dep),
     db: AsyncSession = Depends(get_db),
 ):
-    strategy_id = _parse_int(request.query_params.get("strategy_id"))
+    strategy_type = _parse_str(request.query_params.get("strategy_type"))
+    exchange = _parse_str(request.query_params.get("exchange"))
+    asset = _parse_str(request.query_params.get("asset"))
     service = DashboardService(db)
     data = await service.get_dashboard_data(
         user_id,
-        strategy_id,
+        strategy_type,
+        exchange,
+        asset,
         include_equity_series=False,
         include_historical_series=False,
     )
@@ -51,15 +53,18 @@ async def dashboard_data(
     user_id: int = Depends(require_user_id_api_dep),
     db: AsyncSession = Depends(get_db),
 ):
-    strategy_id = _parse_int(request.query_params.get("strategy_id"))
+    strategy_type = _parse_str(request.query_params.get("strategy_type"))
+    exchange = _parse_str(request.query_params.get("exchange"))
+    asset = _parse_str(request.query_params.get("asset"))
     service = DashboardService(db)
     data = await service.get_dashboard_data(
         user_id,
-        strategy_id,
+        strategy_type,
+        exchange,
+        asset,
         include_equity_series=True,
         include_historical_series=False,
     )
-    selected_strategy = data.get("selected_strategy")
     return JSONResponse(
         {
             "metrics": data.get("metrics"),
@@ -70,11 +75,5 @@ async def dashboard_data(
             "equity_max": data.get("equity_max"),
             "equity_dates": data.get("equity_dates"),
             "historical_metrics": data.get("historical_metrics"),
-            "selected_strategy": {
-                "id": selected_strategy.id,
-                "asset": selected_strategy.asset,
-            }
-            if selected_strategy
-            else None,
         }
     )

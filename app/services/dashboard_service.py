@@ -418,57 +418,100 @@ class DashboardService:
     async def get_dashboard_data(
         self,
         user_id: int,
-        filter_strategy_id: Optional[int] = None,
+        filter_strategy_type: Optional[str] = None,
+        filter_exchange: Optional[str] = None,
+        filter_asset: Optional[str] = None,
         include_equity_series: bool = True,
         include_historical_series: bool = True,
     ) -> Dict[str, Any]:
         connected_exchanges = await self.strategy_service.get_connected_exchange_names(user_id)
         has_credentials = bool(connected_exchanges)
         active_strategies = await self.strategy_service.get_active_strategies(user_id)
+        has_active = len(active_strategies) > 0
         today = date.today()
-        selected_strategy = self._resolve_selected_strategy(active_strategies, filter_strategy_id)
-        metrics = self._build_base_metrics(active_strategies, selected_strategy, today)
         active_rows = []
+        strategy_stats_all = {}
+        if has_active:
+            rows_data = await self.strategy_service.build_active_strategy_rows(
+                user_id,
+                active_strategies,
+                active_strategies,
+            )
+            active_rows = rows_data.get("rows", [])
+            strategy_stats_all = rows_data.get("strategy_stats", {})
+
+        strategy_key_by_id = {strategy.id: strategy.strategy_key for strategy in active_strategies}
+        type_labels = {}
+        for strategy in active_strategies:
+            key = (strategy.strategy_key or "").strip()
+            if not key:
+                continue
+            if key not in type_labels:
+                type_labels[key] = (strategy.name or key).strip()
+        strategy_type_options = [
+            {"key": key, "label": label} for key, label in type_labels.items()
+        ]
+        strategy_type_options.sort(key=lambda item: item["label"].lower())
+        exchange_options = sorted(
+            {row["exchange_name"] for row in active_rows if row.get("exchange_name")}
+        )
+        asset_options = sorted({row["asset"] for row in active_rows if row.get("asset")})
+
+        def _norm(value: Optional[str]) -> Optional[str]:
+            return value.strip().lower() if value else None
+
+        strategy_type_filter = _norm(filter_strategy_type)
+        exchange_filter = _norm(filter_exchange)
+        asset_filter = _norm(filter_asset)
+        filtered_rows = []
+        for row in active_rows:
+            if strategy_type_filter:
+                row_key = _norm(strategy_key_by_id.get(row["id"]))
+                if row_key != strategy_type_filter:
+                    continue
+            if exchange_filter:
+                row_exchange = _norm(row.get("exchange_name"))
+                if row_exchange != exchange_filter:
+                    continue
+            if asset_filter:
+                row_asset = _norm(row.get("asset"))
+                if row_asset != asset_filter:
+                    continue
+            filtered_rows.append(row)
+
+        filtered_ids = {row["id"] for row in filtered_rows}
+        filtered_strategies = [s for s in active_strategies if s.id in filtered_ids]
+        metrics = self._build_base_metrics(filtered_strategies, None, today)
+        strategy_stats = {
+            strategy_id: stats
+            for strategy_id, stats in strategy_stats_all.items()
+            if strategy_id in filtered_ids
+        }
+        metrics = self._apply_current_metrics(metrics, None, strategy_stats)
+
         equity_series = []
         equity_min = 0.0
         equity_max = 0.0
         equity_dates = []
-        has_active = len(active_strategies) > 0
-        scope_strategies = [selected_strategy] if selected_strategy else active_strategies
-        strategy_stats = {}
-
-        if has_active:
-            all_strategy_ids = [strategy.id for strategy in active_strategies]
-            rows_data = await self.strategy_service.build_active_strategy_rows(
-                user_id,
-                active_strategies,
-                scope_strategies,
+        if include_equity_series and filtered_ids:
+            all_equity_snapshots = await self.strategy_service.get_equity_snapshots(list(filtered_ids))
+            (
+                equity_series,
+                equity_min,
+                equity_max,
+                equity_dates,
+            ) = await self._build_equity_data(
+                filtered_strategies,
+                None,
+                all_equity_snapshots,
             )
-            active_rows = rows_data.get("rows", [])
-            strategy_stats = rows_data.get("strategy_stats", {})
-            metrics = self._apply_current_metrics(metrics, selected_strategy, strategy_stats)
-            if include_equity_series:
-                all_equity_snapshots = await self.strategy_service.get_equity_snapshots(all_strategy_ids)
-                (
-                    equity_series,
-                    equity_min,
-                    equity_max,
-                    equity_dates,
-                ) = await self._build_equity_data(
-                    active_strategies,
-                    selected_strategy,
-                    all_equity_snapshots,
-                )
-        
-        table_rows = active_rows
-        if selected_strategy:
-            table_rows = [row for row in active_rows if row["id"] == selected_strategy.id]
 
-        total_balance_usdc = sum(row["current_capital_usdc"] for row in active_rows) if active_rows else 0.0
-        if selected_strategy:
-            current_balance_usdc = metrics["current_capital_usdc"]
-        else:
-            current_balance_usdc = total_balance_usdc
+        table_rows = filtered_rows
+
+        total_balance_usdc = (
+            sum(row["current_capital_usdc"] for row in filtered_rows) if filtered_rows else 0.0
+        )
+        current_balance_usdc = total_balance_usdc
 
         closed_strategies = await self.strategy_service.get_closed_strategies(user_id)
         (
@@ -484,7 +527,6 @@ class DashboardService:
             "user_id": user_id,
             "active_strategies": active_rows,
             "table_rows": table_rows,
-            "selected_strategy": selected_strategy,
             "metrics": metrics,
             "total_balance_usdc": total_balance_usdc,
             "current_balance_usdc": current_balance_usdc,
@@ -495,7 +537,12 @@ class DashboardService:
             "equity_dates": equity_dates,
             "has_active": has_active,
             "has_credentials": has_credentials,
-            "strategy_filter_id": selected_strategy.id if selected_strategy else None,
+            "strategy_type_options": strategy_type_options,
+            "exchange_options": exchange_options,
+            "asset_options": asset_options,
+            "strategy_type_filter": filter_strategy_type or "",
+            "exchange_filter": filter_exchange or "",
+            "asset_filter": filter_asset or "",
             "historical_rows": closed_rows,
             "historical_metrics": historical_metrics,
             "historical_series": historical_series,
