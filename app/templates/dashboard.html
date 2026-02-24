@@ -160,6 +160,12 @@
                                             </button>
                                         </th>
                                         <th class="py-2 text-center uppercase tracking-wider">
+                                            <button type="button" class="inline-flex items-center gap-1" data-sort-key="fees_usdc">
+                                                <span>Fees</span>
+                                                <span class="text-[0.6rem]" data-sort-indicator></span>
+                                            </button>
+                                        </th>
+                                        <th class="py-2 text-center uppercase tracking-wider">
                                             <button type="button" class="inline-flex items-center gap-1" data-sort-key="pnl_usdc">
                                                 <span>PnL</span>
                                                 <span class="text-[0.6rem]" data-sort-indicator></span>
@@ -178,9 +184,10 @@
                                     <tr class="border-b border-white/60">
                                         <td class="py-2 text-center" data-value="{{ s.start }}">{{ s.start }}</td>
                                         <td class="py-2 text-center" data-value="{{ s.stop }}">{{ s.stop }} ({{ s.days_active }})</td>
-                                        <td class="py-2 text-center" data-value="{{ s.name }}">{{ s.name }}</td>
+                                        <td class="py-2 text-center" data-value="{{ s.name }} {{ s.asset }}">{{ s.name }} - {{ s.asset }}</td>
                                         <td class="py-2 text-center" data-value="{{ s.exchange_name|capitalize }}">{{ s.exchange_name|capitalize }}</td>
                                         <td class="py-2 text-center num" data-value="{{ s.starting_capital_usdc }}">${{ s.starting_capital_usdc|round(2) }}</td>
+                                        <td class="py-2 text-center num" data-value="{{ s.fees_usdc }}">${{ s.fees_usdc|round(2) }}</td>
                                         <td class="py-2 text-center num {% if s.pnl_usdc < 0 %}text-red-700{% endif %}" data-value="{{ s.pnl_usdc }}">${{ s.pnl_usdc|round(2) }}</td>
                                         <td class="py-2 text-center num {% if s.apr_percent < 0 %}text-red-700{% elif s.apr_percent > 0 %}text-green-700{% endif %}" data-value="{{ s.apr_percent }}">{{ s.apr_percent|round(2) }}%</td>
                                     </tr>
@@ -286,6 +293,7 @@
             name: "text",
             exchange: "text",
             starting_capital_usdc: "number",
+            fees_usdc: "number",
             pnl_usdc: "number",
             apr_percent: "number",
         }
