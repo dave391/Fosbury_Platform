@@ -216,7 +216,7 @@ class DashboardService:
                 {
                     "key": "all",
                     "strategy_id": None,
-                    "label": "All",
+                    "label": "Cumulative PnL",
                     "chart": aggregate_chart,
                     "values": series_values if aggregate_deltas else [],
                     "dates": [snap["snapshot_date"].isoformat() for snap in aggregate_balance],
@@ -265,27 +265,10 @@ class DashboardService:
 
         return equity_series, equity_min, equity_max, equity_dates
 
-    async def _build_historical_data(self, closed_strategies: List[Any], include_series: bool = True):
+    async def _build_closed_rows(self, closed_strategies: List[Any]) -> List[Dict[str, Any]]:
         closed_rows = []
-        historical_metrics = {
-            "count": 0,
-            "pnl_usdc": 0.0,
-            "apr_percent": 0.0,
-            "fees_usdc": 0.0,
-        }
-        historical_series = []
-        historical_min = 0.0
-        historical_max = 0.0
-        historical_dates = []
         if not closed_strategies:
-            return (
-                closed_rows,
-                historical_metrics,
-                historical_series,
-                historical_min,
-                historical_max,
-                historical_dates,
-            )
+            return closed_rows
 
         closed_accounts_by_id = {}
         closed_account_ids = {strategy.exchange_account_id for strategy in closed_strategies}
@@ -319,8 +302,6 @@ class DashboardService:
             stats = snapshot_totals.setdefault(snap.strategy_id, {"funding_total": 0.0, "fees_total": 0.0})
             stats["funding_total"] += snap.funding_delta_usdc or 0.0
             stats["fees_total"] += snap.fees_delta_usdc or 0.0
-
-        cumulative_by_date = {} if include_series else None
 
         for strategy in closed_strategies:
             closure = closure_by_id.get(strategy.id)
@@ -359,70 +340,15 @@ class DashboardService:
                     "pnl_usdc": pnl_usdc,
                     "fees_usdc": fees_usdc,
                     "apr_percent": apr_percent,
+                    "days_active": days_active,
                 }
             )
-
-            if include_series:
-                closed_date = closed_at.date()
-                cumulative_by_date.setdefault(closed_date, 0.0)
-                cumulative_by_date[closed_date] += pnl_usdc
-
-            historical_metrics["count"] += 1
-            historical_metrics["pnl_usdc"] += pnl_usdc
-            historical_metrics["fees_usdc"] += fees_usdc
-
-        if closed_rows:
-            total_starting = sum(row["starting_capital_usdc"] for row in closed_rows)
-            if total_starting > 0:
-                weighted = sum(row["apr_percent"] * row["starting_capital_usdc"] for row in closed_rows)
-                historical_metrics["apr_percent"] = weighted / total_starting
-            else:
-                historical_metrics["apr_percent"] = 0.0
-
-        if include_series and cumulative_by_date:
-            balance_snaps = []
-            cumulative_total = 0.0
-            series_values = []
-            for snap_date in sorted(cumulative_by_date.keys()):
-                cumulative_total += cumulative_by_date[snap_date]
-                balance_snaps.append({"snapshot_date": snap_date, "equity_usdc": cumulative_total})
-                series_values.append(cumulative_total)
-            historical_dates = [snap["snapshot_date"].isoformat() for snap in balance_snaps]
-            historical_series = [
-                {
-                    "key": "closed",
-                    "strategy_id": None,
-                    "label": "Closed",
-                    "chart": self.build_equity_chart(balance_snaps),
-                    "values": series_values,
-                }
-            ]
-            if series_values:
-                historical_min = min(series_values)
-                historical_max = max(series_values)
-                if historical_max == historical_min:
-                    historical_max = historical_min + 1
-            for series in historical_series:
-                series["chart"]["min"] = historical_min
-                series["chart"]["max"] = historical_max
-
-        return (
-            closed_rows,
-            historical_metrics,
-            historical_series,
-            historical_min,
-            historical_max,
-            historical_dates,
-        )
+        return closed_rows
 
     async def get_dashboard_data(
         self,
         user_id: int,
-        filter_strategy_type: Optional[str] = None,
-        filter_exchange: Optional[str] = None,
-        filter_asset: Optional[str] = None,
         include_equity_series: bool = True,
-        include_historical_series: bool = True,
     ) -> Dict[str, Any]:
         connected_exchanges = await self.strategy_service.get_connected_exchange_names(user_id)
         has_credentials = bool(connected_exchanges)
@@ -440,88 +366,40 @@ class DashboardService:
             active_rows = rows_data.get("rows", [])
             strategy_stats_all = rows_data.get("strategy_stats", {})
 
-        strategy_key_by_id = {strategy.id: strategy.strategy_key for strategy in active_strategies}
-        type_labels = {}
-        for strategy in active_strategies:
-            key = (strategy.strategy_key or "").strip()
-            if not key:
-                continue
-            if key not in type_labels:
-                type_labels[key] = (strategy.name or key).strip()
-        strategy_type_options = [
-            {"key": key, "label": label} for key, label in type_labels.items()
-        ]
-        strategy_type_options.sort(key=lambda item: item["label"].lower())
-        exchange_options = sorted(
-            {row["exchange_name"] for row in active_rows if row.get("exchange_name")}
-        )
-        asset_options = sorted({row["asset"] for row in active_rows if row.get("asset")})
+        active_ids = {row["id"] for row in active_rows}
+        metrics = self._build_base_metrics(active_strategies, None, today)
+        metrics = self._apply_current_metrics(metrics, None, strategy_stats_all)
 
-        def _norm(value: Optional[str]) -> Optional[str]:
-            return value.strip().lower() if value else None
-
-        strategy_type_filter = _norm(filter_strategy_type)
-        exchange_filter = _norm(filter_exchange)
-        asset_filter = _norm(filter_asset)
-        filtered_rows = []
-        for row in active_rows:
-            if strategy_type_filter:
-                row_key = _norm(strategy_key_by_id.get(row["id"]))
-                if row_key != strategy_type_filter:
-                    continue
-            if exchange_filter:
-                row_exchange = _norm(row.get("exchange_name"))
-                if row_exchange != exchange_filter:
-                    continue
-            if asset_filter:
-                row_asset = _norm(row.get("asset"))
-                if row_asset != asset_filter:
-                    continue
-            filtered_rows.append(row)
-
-        filtered_ids = {row["id"] for row in filtered_rows}
-        filtered_strategies = [s for s in active_strategies if s.id in filtered_ids]
-        metrics = self._build_base_metrics(filtered_strategies, None, today)
-        strategy_stats = {
-            strategy_id: stats
-            for strategy_id, stats in strategy_stats_all.items()
-            if strategy_id in filtered_ids
-        }
-        metrics = self._apply_current_metrics(metrics, None, strategy_stats)
+        closed_strategies = await self.strategy_service.get_closed_strategies(user_id)
+        closed_rows = await self._build_closed_rows(closed_strategies)
+        terminated_pnl_usdc = sum(row["pnl_usdc"] for row in closed_rows) if closed_rows else 0.0
+        cumulative_pnl_usdc = (metrics.get("pnl_usdc") or 0.0) + terminated_pnl_usdc
 
         equity_series = []
         equity_min = 0.0
         equity_max = 0.0
         equity_dates = []
-        if include_equity_series and filtered_ids:
-            all_equity_snapshots = await self.strategy_service.get_equity_snapshots(list(filtered_ids))
+        if include_equity_series and active_ids:
+            equity_ids = set(active_ids)
+            equity_ids.update([strategy.id for strategy in closed_strategies])
+            all_equity_snapshots = await self.strategy_service.get_equity_snapshots(list(equity_ids))
             (
                 equity_series,
                 equity_min,
                 equity_max,
                 equity_dates,
             ) = await self._build_equity_data(
-                filtered_strategies,
+                active_strategies,
                 None,
                 all_equity_snapshots,
             )
 
-        table_rows = filtered_rows
+        table_rows = active_rows
 
         total_balance_usdc = (
-            sum(row["current_capital_usdc"] for row in filtered_rows) if filtered_rows else 0.0
+            sum(row["current_capital_usdc"] for row in active_rows) if active_rows else 0.0
         )
         current_balance_usdc = total_balance_usdc
-
-        closed_strategies = await self.strategy_service.get_closed_strategies(user_id)
-        (
-            closed_rows,
-            historical_metrics,
-            historical_series,
-            historical_min,
-            historical_max,
-            historical_dates,
-        ) = await self._build_historical_data(closed_strategies, include_series=include_historical_series)
 
         return {
             "user_id": user_id,
@@ -537,17 +415,7 @@ class DashboardService:
             "equity_dates": equity_dates,
             "has_active": has_active,
             "has_credentials": has_credentials,
-            "strategy_type_options": strategy_type_options,
-            "exchange_options": exchange_options,
-            "asset_options": asset_options,
-            "strategy_type_filter": filter_strategy_type or "",
-            "exchange_filter": filter_exchange or "",
-            "asset_filter": filter_asset or "",
             "historical_rows": closed_rows,
-            "historical_metrics": historical_metrics,
-            "historical_series": historical_series,
-            "historical_min": historical_min,
-            "historical_max": historical_max,
-            "historical_dates": historical_dates,
-            
+            "terminated_pnl_usdc": terminated_pnl_usdc,
+            "cumulative_pnl_usdc": cumulative_pnl_usdc,
         }

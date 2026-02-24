@@ -8,9 +8,9 @@
 </div>
 
             <div class="card-surface mt-8 px-6 py-8">
-                <p class="card-title">Portfolio Value</p>
+                <p class="card-title">Cumulative PnL</p>
                 <div class="mt-2 flex flex-wrap items-baseline gap-3">
-                    <p class="metric-hero font-semibold num"><span id="metric-current-card" class="loading-text num">Loading</span></p>
+                    <p class="metric-hero font-semibold num"><span id="metric-cumulative-pnl" class="loading-text num">Loading</span></p>
                     <span class="inline-flex items-center gap-1 text-sm font-semibold metric-positive">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path d="M7 17L17 7m0 0H8m9 0v9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -30,61 +30,52 @@
 
             <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div class="panel-secondary metric-card px-4 py-3">
-                    <p class="card-title">Daily P&amp;L</p>
+                    <p class="card-title">PnL Active Strategies</p>
                     <span class="metric-icon">$</span>
                     <p class="mt-2 text-lg font-semibold loading-text num" id="metric-pnl">Loading</p>
                 </div>
                 <div class="panel-secondary metric-card px-4 py-3">
-                    <p class="card-title">Total Return</p>
-                    <span class="metric-icon">%</span>
-                    <p class="mt-2 text-lg font-semibold"><span id="metric-apr" class="loading-text num">Loading</span></p>
+                    <p class="card-title">PnL Terminated Strategies</p>
+                    <span class="metric-icon">$</span>
+                    <p class="mt-2 text-lg font-semibold"><span id="metric-terminated-pnl" class="loading-text num">Loading</span></p>
                 </div>
                 <div class="panel-secondary metric-card px-4 py-3">
-                    <p class="card-title">Running Days</p>
-                    <span class="metric-icon">
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-width="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6" stroke-width="2"></line>
-                            <line x1="8" y1="2" x2="8" y2="6" stroke-width="2"></line>
-                            <line x1="3" y1="10" x2="21" y2="10" stroke-width="2"></line>
-                        </svg>
-                    </span>
-                    <p class="mt-2 text-lg font-semibold num">{{ metrics.days_active }}</p>
+                    <p class="card-title">Active strategies balance</p>
+                    <span class="metric-icon">$</span>
+                    <p class="mt-2 text-lg font-semibold loading-text num" id="metric-active-balance">Loading</p>
                 </div>
             </div>
 
             <div class="mt-4" data-dashboard-views data-default-view="current">
                 <div data-view-panel="current">
                     {% if has_active %}
-                    <div class="card-surface p-6">
+                    <div class="mt-4 panel-secondary px-4 pb-4 pt-6 profit-loss-card">
+                        <div class="profit-loss-header">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <h3 class="section-title">Profit &amp; Loss Chart</h3>
+                                <div class="inline-flex items-center gap-2">
+                                    <button type="button" class="btn-inline btn-secondary" data-equity-tab data-equity-view="cumulative">Cumulative PnL</button>
+                                    <button type="button" class="btn-inline btn-secondary" data-equity-tab data-equity-view="active">Active Strategies</button>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-sm font-editorial loading-text" id="equity-loading">Loading</div>
+                        </div>
+                        <div class="hidden profit-loss-body" id="equity-chart">
+                            <div class="relative equity-chart-frame">
+                                <svg viewBox="0 0 {{ equity_chart.width }} {{ equity_chart.height }}" class="equity-chart-svg">
+                                    <g id="equity-axes"></g>
+                                    <g id="equity-lines"></g>
+                                </svg>
+                                <div id="equity-tooltip" class="equity-tooltip hidden"></div>
+                            </div>
+                            <div class="equity-legend text-xs uppercase tracking-wider" id="equity-legend"></div>
+                        </div>
+                        <p class="mt-3 hidden text-sm font-editorial" id="equity-empty">No snapshots available.</p>
+                    </div>
+
+                    <div class="card-surface mt-4 p-6">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <h3 class="section-title">Active Strategies</h3>
-                            <form action="/dashboard" method="get" class="flex flex-nowrap items-center gap-2" data-auto-filter>
-                                <select name="strategy_type" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider" data-auto-filter-input>
-                                    <option value="">All Types</option>
-                                    {% for t in strategy_type_options %}
-                                    <option value="{{ t.key }}" {% if strategy_type_filter == t.key %}selected{% endif %}>
-                                        {{ t.label }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <select name="exchange" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider" data-auto-filter-input>
-                                    <option value="">All Exchanges</option>
-                                    {% for ex in exchange_options %}
-                                    <option value="{{ ex }}" {% if exchange_filter == ex %}selected{% endif %}>
-                                        {{ ex|upper }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <select name="asset" class="input w-auto px-2 py-1 text-[0.65rem] uppercase tracking-wider" data-auto-filter-input>
-                                    <option value="">All Pairs</option>
-                                    {% for asset in asset_options %}
-                                    <option value="{{ asset }}" {% if asset_filter == asset %}selected{% endif %}>
-                                        {{ asset }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </form>
                         </div>
                         <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
                             {% for s in table_rows %}
@@ -99,44 +90,34 @@
                                     </div>
                                 </div>
                                 <span class="status-dot"></span>
-                                <div class="mt-4 grid grid-cols-2 gap-3 text-xs uppercase tracking-wider">
+                                <div class="mt-4 grid grid-cols-2 gap-3 text-xs uppercase tracking-wider md:grid-cols-4">
                                     <div>
-                                        <p>PnL</p>
-                                        <p class="mt-1 text-base font-semibold num {% if s.apr_percent < 0 %}metric-negative{% elif s.apr_percent > 0 %}metric-positive{% endif %}">{% if s.apr_percent > 0 %}↗ {% endif %}{{ s.apr_percent|round(2) }}%</p>
+                                        <p>Value</p>
+                                        <p class="mt-1 text-base font-semibold num">${{ s.allocated_capital_usdc|round(2) }}</p>
                                     </div>
                                     <div>
-                                        <p>Allocated</p>
-                                        <p class="mt-1 text-base font-semibold num">${{ s.allocated_capital_usdc|round(2) }}</p>
+                                        <p>PnL</p>
+                                        <p class="mt-1 text-base font-semibold num {% if s.pnl_usdc < 0 %}metric-negative{% elif s.pnl_usdc > 0 %}metric-positive{% endif %}">${{ s.pnl_usdc|round(2) }}</p>
+                                    </div>
+                                    <div>
+                                        <p>ROI</p>
+                                        <p class="mt-1 text-base font-semibold num {% if s.roi_percent < 0 %}metric-negative{% elif s.roi_percent > 0 %}metric-positive{% endif %}">{% if s.roi_percent > 0 %}↗ {% endif %}{{ s.roi_percent|round(2) }}%</p>
+                                    </div>
+                                    <div>
+                                        <p>days</p>
+                                        <p class="mt-1 text-base font-semibold num">{{ s.days_active }}</p>
                                     </div>
                                 </div>
                                 <div class="mt-4 flex flex-wrap items-center gap-2">
-                                    <button type="button" class="btn-inline btn-secondary" data-manage-open data-strategy-id="{{ s.id }}" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}" data-exchange-available="{{ s.exchange_available_usdc }}" data-reduce-max="{{ s.reduce_max_usdc }}">Manage</button>
+                                    <button type="button" class="btn-inline btn-secondary btn-inline-manage" data-manage-open data-strategy-id="{{ s.id }}" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}" data-exchange-available="{{ s.exchange_available_usdc }}" data-reduce-max="{{ s.reduce_max_usdc }}">Manage</button>
                                     <form action="/strategy/stop" method="post" class="flex" data-confirm-form data-confirm-action="stop" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}">
                                         <input type="hidden" name="strategy_id" value="{{ s.id }}">
-                                        <button type="submit" class="btn-inline btn-danger">Stop Strategy</button>
+                                        <button type="submit" class="btn-inline btn-secondary">Stop Strategy</button>
                                     </form>
                                 </div>
                             </div>
                             {% endfor %}
                         </div>
-                    </div>
-
-                    <div class="mt-4 panel-secondary px-4 pb-4 pt-6 profit-loss-card">
-                        <div class="profit-loss-header">
-                            <h3 class="section-title">Profit &amp; Loss Chart</h3>
-                            <div class="mt-3 text-sm font-editorial loading-text" id="equity-loading">Loading</div>
-                        </div>
-                        <div class="hidden profit-loss-body" id="equity-chart">
-                            <div class="relative equity-chart-frame">
-                                <svg viewBox="0 0 {{ equity_chart.width }} {{ equity_chart.height }}" class="equity-chart-svg">
-                                    <g id="equity-axes"></g>
-                                    <g id="equity-lines"></g>
-                                </svg>
-                                <div id="equity-tooltip" class="equity-tooltip hidden"></div>
-                            </div>
-                            <div class="equity-legend text-xs uppercase tracking-wider" id="equity-legend"></div>
-                        </div>
-                        <p class="mt-3 hidden text-sm font-editorial" id="equity-empty">No snapshots available.</p>
                     </div>
 
                     <div class="card-surface mt-4 p-6">
@@ -156,7 +137,7 @@
                                         </th>
                                         <th class="py-2 text-center uppercase tracking-wider">
                                             <button type="button" class="inline-flex items-center gap-1" data-sort-key="stop">
-                                                <span>Stop</span>
+                                                <span>Stop (days)</span>
                                                 <span class="text-[0.6rem]" data-sort-indicator></span>
                                             </button>
                                         </th>
@@ -196,7 +177,7 @@
                                     {% for s in historical_rows %}
                                     <tr class="border-b border-white/60">
                                         <td class="py-2 text-center" data-value="{{ s.start }}">{{ s.start }}</td>
-                                        <td class="py-2 text-center" data-value="{{ s.stop }}">{{ s.stop }}</td>
+                                        <td class="py-2 text-center" data-value="{{ s.stop }}">{{ s.stop }} ({{ s.days_active }})</td>
                                         <td class="py-2 text-center" data-value="{{ s.name }}">{{ s.name }}</td>
                                         <td class="py-2 text-center" data-value="{{ s.exchange_name|capitalize }}">{{ s.exchange_name|capitalize }}</td>
                                         <td class="py-2 text-center num" data-value="{{ s.starting_capital_usdc }}">${{ s.starting_capital_usdc|round(2) }}</td>
@@ -210,24 +191,6 @@
                         {% else %}
                         <div class="mt-3 text-sm font-editorial">No closed strategies yet.</div>
                         {% endif %}
-                    </div>
-                    <div class="mt-4 grid grid-cols-2 gap-3">
-                        <div class="panel-secondary p-4">
-                            <p class="card-title">Closed Strategies</p>
-                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-count">Loading</p>
-                        </div>
-                        <div class="panel-secondary p-4">
-                            <p class="card-title">Total PnL</p>
-                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-pnl">Loading</p>
-                        </div>
-                        <div class="panel-secondary p-4">
-                            <p class="card-title">APR</p>
-                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-apr">Loading</p>
-                        </div>
-                        <div class="panel-secondary p-4">
-                            <p class="card-title">Fees</p>
-                            <p class="mt-2 text-lg font-semibold loading-text num" id="historical-fees">Loading</p>
-                        </div>
                     </div>
                     {% endif %}
                 </div>
@@ -291,9 +254,7 @@
                 </div>
             </div>
 <script>
-    const params = new URLSearchParams(window.location.search)
-    const query = params.toString()
-    const url = query ? `/dashboard/data?${query}` : "/dashboard/data"
+    const url = "/dashboard/data"
     const formatUsd = (value) => new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD",
@@ -313,15 +274,6 @@
         return `${formatNumber(0)}%`
     }
     const upper = (value) => String(value || "").toUpperCase()
-    const setupAutoFilters = () => {
-        const form = document.querySelector("[data-auto-filter]")
-        if (!form) return
-        const inputs = Array.from(form.querySelectorAll("[data-auto-filter-input]"))
-        if (!inputs.length) return
-        inputs.forEach((input) => {
-            input.addEventListener("change", () => form.submit())
-        })
-    }
     const setupClosedTableSorting = () => {
         const table = document.getElementById("historical-closed-table")
         const body = document.getElementById("historical-closed-body")
@@ -386,12 +338,14 @@
         updateIndicators()
         sortRows()
     }
-    const renderChart = ({ prefix, series, min, max, dates, selectedId }) => {
+    const renderChart = ({ prefix, series, legendSeries, min, max, dates, selectedKey, onLegendClick }) => {
         const loadingEl = document.getElementById(`${prefix}-loading`)
         if (loadingEl) loadingEl.classList.add("hidden")
         const emptyEl = document.getElementById(`${prefix}-empty`)
         const chartEl = document.getElementById(`${prefix}-chart`)
-        if (!series || series.length === 0) {
+        const displaySeries = series || []
+        const fullSeries = legendSeries || displaySeries
+        if (!displaySeries || displaySeries.length === 0) {
             if (emptyEl) emptyEl.classList.remove("hidden")
             return
         }
@@ -408,7 +362,7 @@
         if (svg) {
             svg.setAttribute("viewBox", `0 0 ${renderWidth} ${renderHeight}`)
         }
-        const highlightKey = selectedId ? String(selectedId) : (series.find((item) => item.key === "all") ? "all" : String(series[0].key))
+        const highlightKey = selectedKey ? String(selectedKey) : (displaySeries.find((item) => item.key === "all") ? "all" : String(displaySeries[0].key))
         const ticks = [min, (min + max) / 2, max]
         const measureText = (() => {
             const canvas = document.createElement("canvas")
@@ -426,7 +380,7 @@
         const highlighted = []
         const colorByKey = {}
         let paletteIndex = 0
-        series.forEach((item) => {
+        fullSeries.forEach((item) => {
             if (item.key === "all") {
                 colorByKey[item.key] = "#ffffff"
                 return
@@ -434,7 +388,7 @@
             colorByKey[item.key] = palette[paletteIndex % palette.length]
             paletteIndex += 1
         })
-        series.forEach((item) => {
+        displaySeries.forEach((item) => {
             const isHighlighted = String(item.key) === highlightKey
             if (isHighlighted) {
                 highlighted.push(item)
@@ -443,7 +397,7 @@
             }
         })
         const colorFor = (item) => {
-            if (String(item.key) === highlightKey || item.key === "all") {
+            if (item.key === "all") {
                 return "#ffffff"
             }
             return colorByKey[item.key] || "#ffffff"
@@ -480,7 +434,7 @@
             return points.join(" ")
         }
         const drawAxis = () => {
-            if (!axesEl || series.length === 0) return
+            if (!axesEl || displaySeries.length === 0) return
             const axisColor = "rgba(255, 255, 255, 0.6)"
             const xAxis = document.createElementNS("http://www.w3.org/2000/svg", "line")
             xAxis.setAttribute("x1", leftPadding)
@@ -513,7 +467,7 @@
                 label.setAttribute("x", leftPadding - 8)
                 label.setAttribute("y", y + 3)
                 label.setAttribute("fill", axisColor)
-                label.setAttribute("font-size", "8")
+                label.setAttribute("font-size", "10")
                 label.setAttribute("text-anchor", "end")
                 label.textContent = `${value.toFixed(2)}`
                 axesEl.appendChild(label)
@@ -531,7 +485,7 @@
                 zeroLine.setAttribute("stroke-dasharray", "3,3")
                 axesEl.appendChild(zeroLine)
             }
-            const pointDates = (series[0]?.dates && series[0].dates.length >= 2) ? series[0].dates : (dates || [])
+            const pointDates = (displaySeries[0]?.dates && displaySeries[0].dates.length >= 2) ? displaySeries[0].dates : (dates || [])
             if (pointDates.length >= 2) {
                 const labelCount = Math.max(2, Math.min(5, Math.floor(renderWidth / 180) + 1))
                 const indices = new Set()
@@ -540,7 +494,7 @@
                     indices.add(index)
                 }
                 const sorted = Array.from(indices).sort((a, b) => a - b)
-                const values = (series[0]?.values || [])
+                const values = (displaySeries[0]?.values || [])
                 const points = buildPoints(values, pointDates).split(" ")
                 sorted.forEach((index, position) => {
                     const dateLabel = pointDates[index]
@@ -552,7 +506,7 @@
                     label.setAttribute("x", x)
                     label.setAttribute("y", y)
                     label.setAttribute("fill", axisColor)
-                    label.setAttribute("font-size", "8")
+                    label.setAttribute("font-size", "10")
                     if (position === 0) {
                         label.setAttribute("text-anchor", "start")
                     } else if (position === sorted.length - 1) {
@@ -571,7 +525,7 @@
             const isAggregate = item.key === "all"
             const isHighlighted = String(item.key) === highlightKey
             const color = colorFor(item)
-            const opacity = isAggregate ? 1 : (isHighlighted ? 1 : selectedId ? 0.2 : 0.3)
+            const opacity = isAggregate ? 1 : (isHighlighted ? 1 : selectedKey ? 0.2 : 0.3)
             const width = 1.5
             const points = buildPoints(item.values || [], item.dates || dates || [])
             line.setAttribute("fill", "none")
@@ -586,10 +540,13 @@
         drawAxis()
         const legendEl = document.getElementById(`${prefix}-legend`)
         if (legendEl) legendEl.innerHTML = ""
-        series.forEach((item) => {
+        fullSeries.forEach((item) => {
             if (!legendEl) return
             const legendItem = document.createElement("div")
-            legendItem.className = "equity-legend-item"
+            legendItem.className = "equity-legend-item cursor-pointer"
+            if (selectedKey && String(item.key) !== String(selectedKey)) {
+                legendItem.classList.add("opacity-50")
+            }
             const swatch = document.createElement("span")
             swatch.className = "equity-legend-swatch"
             swatch.style.backgroundColor = colorFor(item)
@@ -597,10 +554,13 @@
             label.textContent = item.label
             legendItem.appendChild(swatch)
             legendItem.appendChild(label)
+            if (onLegendClick) {
+                legendItem.addEventListener("click", () => onLegendClick(item))
+            }
             legendEl.appendChild(legendItem)
         })
         const tooltip = document.getElementById(`${prefix}-tooltip`)
-        const focusSeries = series.find((item) => String(item.key) === highlightKey) || series[0]
+        const focusSeries = displaySeries.find((item) => String(item.key) === highlightKey) || displaySeries[0]
         const focusPoints = buildPoints(focusSeries?.values || [], focusSeries?.dates || dates || [])
         const points = focusPoints.trim().split(" ").filter(Boolean)
         if (tooltip && svg && points.length > 0) {
@@ -866,9 +826,57 @@
         manageModal.classList.remove("flex")
     }
     let activeView = "current"
-    let equityPayload = null
-    setupAutoFilters()
+    const equityState = {
+        view: "cumulative",
+        filterKey: null,
+        allSeries: [],
+        activeSeries: [],
+        cumulativeSeries: [],
+        min: 0,
+        max: 0,
+        dates: [],
+    }
+    const equityTabs = Array.from(document.querySelectorAll("[data-equity-tab]"))
+    const renderEquity = () => {
+        const viewSeries = equityState.view === "active" ? equityState.activeSeries : equityState.cumulativeSeries
+        let displaySeries = viewSeries
+        if (equityState.filterKey) {
+            displaySeries = viewSeries.filter((item) => String(item.key) === String(equityState.filterKey))
+            if (!displaySeries.length) displaySeries = viewSeries
+        }
+        renderChart({
+            prefix: "equity",
+            series: displaySeries,
+            legendSeries: viewSeries,
+            min: equityState.min,
+            max: equityState.max,
+            dates: equityState.dates,
+            selectedKey: equityState.filterKey,
+            onLegendClick: (item) => {
+                if (equityState.view !== "active") return
+                const key = String(item.key)
+                equityState.filterKey = equityState.filterKey === key ? null : key
+                renderEquity()
+            },
+        })
+    }
+    const setEquityView = (view) => {
+        equityState.view = view
+        if (view !== "active") equityState.filterKey = null
+        equityTabs.forEach((button) => {
+            const isActive = button.getAttribute("data-equity-view") === view
+            button.classList.toggle("font-semibold", isActive)
+            button.classList.toggle("btn-inline-manage", isActive)
+        })
+        renderEquity()
+    }
     setupClosedTableSorting()
+    equityTabs.forEach((button) => {
+        button.addEventListener("click", () => {
+            const view = button.getAttribute("data-equity-view") || "cumulative"
+            setEquityView(view)
+        })
+    })
     fetch(url)
         .then((res) => res.json())
         .then((data) => {
@@ -878,10 +886,10 @@
                 const el = document.getElementById(id)
                 if (el) el.textContent = value
             }
-            const totalBalance = data.total_balance_usdc ?? metrics.current_capital_usdc ?? 0
-            const currentBalance = data.current_balance_usdc ?? metrics.current_capital_usdc ?? 0
-            setText("metric-current-card", formatUsd(currentBalance))
-            setText("metric-apr", formatSignedPercent(metrics.apr_percent || 0))
+            const cumulativePnl = data.cumulative_pnl_usdc ?? 0
+            const activeBalance = data.current_balance_usdc ?? metrics.current_capital_usdc ?? 0
+            setText("metric-cumulative-pnl", formatSignedUsd(cumulativePnl))
+            setText("metric-active-balance", formatUsd(activeBalance))
             const pnlEl = document.getElementById("metric-pnl")
             if (pnlEl) {
                 const pnl = metrics.pnl_usdc || 0
@@ -889,47 +897,25 @@
                 pnlEl.classList.toggle("metric-positive", pnl > 0)
                 pnlEl.classList.toggle("metric-negative", pnl < 0)
             }
-            const aprEl = document.getElementById("metric-apr")
-            if (aprEl) {
-                const apr = metrics.apr_percent || 0
-                aprEl.classList.toggle("metric-positive", apr > 0)
-                aprEl.classList.toggle("metric-negative", apr < 0)
-            }
-            const historical = data.historical_metrics || {}
-            setText("historical-count", `${historical.count ?? 0}`)
-            const historicalPnl = historical.pnl_usdc || 0
-            setText("historical-pnl", formatUsd(historicalPnl))
-            const historicalApr = historical.apr_percent || 0
-            setText("historical-apr", `${historicalApr.toFixed(2)}%`)
-            const historicalFees = historical.fees_usdc || 0
-            setText("historical-fees", formatUsd(historicalFees))
-            const historicalPnlEl = document.getElementById("historical-pnl")
-            if (historicalPnlEl) {
-                historicalPnlEl.classList.toggle("metric-positive", historicalPnl >= 0)
-                historicalPnlEl.classList.toggle("metric-negative", historicalPnl < 0)
-            }
-            const historicalAprEl = document.getElementById("historical-apr")
-            if (historicalAprEl) {
-                historicalAprEl.classList.toggle("metric-negative", historicalApr < 0)
-            }
-            const historicalFeesEl = document.getElementById("historical-fees")
-            if (historicalFeesEl) {
-                historicalFeesEl.classList.remove("metric-positive", "metric-negative")
+            const terminatedPnlEl = document.getElementById("metric-terminated-pnl")
+            if (terminatedPnlEl) {
+                const pnl = data.terminated_pnl_usdc ?? 0
+                terminatedPnlEl.textContent = formatSignedUsd(pnl)
+                terminatedPnlEl.classList.toggle("metric-positive", pnl > 0)
+                terminatedPnlEl.classList.toggle("metric-negative", pnl < 0)
             }
             document.querySelectorAll(".loading-text").forEach((el) => el.classList.remove("loading-text"))
-            const selectedId = data.selected_strategy ? data.selected_strategy.id : null
-            equityPayload = {
-                prefix: "equity",
-                series: data.equity_series || [],
-                min: data.equity_min ?? 0,
-                max: data.equity_max ?? 0,
-                dates: data.equity_dates || [],
-                selectedId,
-            }
-            renderChart(equityPayload)
+            const allSeries = data.equity_series || []
+            equityState.allSeries = allSeries
+            equityState.cumulativeSeries = allSeries.filter((item) => item.key === "all")
+            equityState.activeSeries = allSeries.filter((item) => item.key !== "all")
+            equityState.min = data.equity_min ?? 0
+            equityState.max = data.equity_max ?? 0
+            equityState.dates = data.equity_dates || []
+            setEquityView("cumulative")
         })
     window.addEventListener("resize", () => {
-        if (equityPayload) renderChart(equityPayload)
+        if (equityState.allSeries.length) renderEquity()
     })
     bindMaxButtons()
     bindAmountForms()

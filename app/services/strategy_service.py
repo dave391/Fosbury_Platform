@@ -139,7 +139,9 @@ class StrategyService:
                     "name": strategy.name,
                     "allocated_capital_usdc": strategy.allocated_capital_usdc,
                     "current_capital_usdc": strategy.allocated_capital_usdc,
+                    "pnl_usdc": 0.0,
                     "apr_percent": 0.0,
+                    "roi_percent": 0.0,
                     "days_active": days_active,
                     "reduce_max_usdc": max(0.0, strategy.allocated_capital_usdc - 1),
                     "exchange_account_id": strategy.exchange_account_id,
@@ -178,6 +180,11 @@ class StrategyService:
                 pnl_usdc = 0.0
             row["current_capital_usdc"] = current_capital
             row["reduce_max_usdc"] = max(0.0, current_capital - 1)
+            row["pnl_usdc"] = pnl_usdc
+            if row["allocated_capital_usdc"] > 0:
+                row["roi_percent"] = (pnl_usdc / row["allocated_capital_usdc"]) * 100
+            else:
+                row["roi_percent"] = 0.0
             if row["allocated_capital_usdc"] > 0 and row["days_active"] > 0:
                 row["apr_percent"] = (pnl_usdc / row["allocated_capital_usdc"]) * (365 / row["days_active"]) * 100
             else:
