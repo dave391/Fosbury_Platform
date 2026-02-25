@@ -25,9 +25,9 @@
                         {% else %}
                             <a href="/dashboard" class="nav-link{% if request.url.path == '/dashboard' %} nav-link-active{% endif %}">Dashboard</a>
                             {% if has_credentials is defined and not has_credentials %}
-                                <span class="nav-link opacity-50 pointer-events-none">Strategy</span>
+                                <span class="nav-link opacity-50 pointer-events-none">Strategies</span>
                             {% else %}
-                                <a href="/strategy" class="nav-link{% if request.url.path == '/strategy' %} nav-link-active{% endif %}">Strategy</a>
+                                <a href="/strategy" class="nav-link{% if request.url.path == '/strategy' %} nav-link-active{% endif %}">Strategies</a>
                             {% endif %}
                             <a href="/config" class="nav-link{% if request.url.path == '/config' %} nav-link-active{% endif %}">Exchanges</a>
                         {% endif %}

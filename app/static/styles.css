@@ -275,6 +275,17 @@ body {
   transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
+.btn-inline-manage {
+  background: rgba(131, 91, 254, 0.28);
+  color: var(--ink);
+}
+
+.btn-inline.btn-inline-manage:hover {
+  background: rgba(131, 91, 254, 0.7);
+  color: var(--ink);
+  box-shadow: 0 0 16px rgba(131, 91, 254, 0.55);
+}
+
 .btn-primary {
   background: var(--info-bg);
   color: var(--ink);
@@ -587,176 +598,10 @@ body {
   color: var(--ink);
 }
 
-.sidebar {
-  width: 14rem;
-  flex-shrink: 0;
-  border-right: 1px solid var(--card-border);
-  background: rgba(10, 10, 15, 0.55);
-  backdrop-filter: blur(18px);
-}
-
-.sidebar-title {
-  border-bottom: 1px solid var(--card-border);
-  padding: 1rem;
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .sidebar-logo {
   width: 3.75rem;
   height: 3.75rem;
   object-fit: contain;
-}
-
-.sidebar-brand {
-  text-align: center;
-  width: 100%;
-}
-
-.sidebar-nav {
-  display: grid;
-  gap: 0.25rem;
-  padding: 1rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  border: 1px solid var(--card-border);
-  color: var(--ink-soft);
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--card-radius);
-  background: rgba(29, 29, 31, 0.5);
-}
-
-.sidebar-icon {
-  width: 0.9rem;
-  height: 0.9rem;
-  flex-shrink: 0;
-  stroke-width: 1.6;
-}
-
-.sidebar-link:hover {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
-.sidebar-link-active {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
-.sidebar-link-danger {
-  color: #f87171;
-}
-
-.sidebar-link-logout {
-  margin-top: 1rem;
-}
-
-.sidebar-link-danger:hover {
-  background: var(--danger-bg);
-  color: var(--ink);
-}
-
-.mobile-nav {
-  border-bottom: 1px solid var(--card-border);
-}
-
-.mobile-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.7rem;
-  border-bottom: 1px solid var(--card-border);
-  background: rgba(10, 10, 15, 0.55);
-  backdrop-filter: blur(18px);
-}
-
-.mobile-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.mobile-logo {
-  width: clamp(1.2rem, 5vw, 1.6rem);
-  height: clamp(1.2rem, 5vw, 1.6rem);
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.mobile-title {
-  font-weight: 600;
-  font-size: clamp(0.7rem, 3.5vw, 0.9rem);
-  white-space: nowrap;
-}
-
-.mobile-toggle-input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
-.mobile-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--card-border);
-  padding: 0.3rem 0.45rem;
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  border-radius: 4px;
-}
-
-.mobile-menu-panel {
-  border-bottom: 1px solid var(--card-border);
-  display: none;
-}
-
-.mobile-menu-panel .sidebar-nav {
-  padding: 0.6rem 0.9rem;
-}
-
-.mobile-toggle-input:checked ~ .mobile-topbar .mobile-toggle {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
-
-.mobile-toggle-input:checked ~ .mobile-menu-panel {
-  display: block;
-}
-
-.mobile-burger {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  flex-shrink: 0;
-}
-
-.mobile-burger-line {
-  width: 1.05rem;
-  height: 2px;
-  background: var(--ink-soft);
-  display: block;
 }
 
 .page-header {
@@ -833,6 +678,53 @@ body {
 .num {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+}
+
+.profit-loss-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.profit-loss-body {
+  margin-top: 0.75rem;
+}
+
+.equity-chart-frame {
+  width: 100%;
+}
+
+.equity-chart-svg {
+  width: 100%;
+  height: 320px;
+  display: block;
+}
+
+.equity-legend {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  column-gap: 20px;
+  row-gap: 12px;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 20px;
+  margin-top: 16px;
+}
+
+.equity-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.equity-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .equity-tooltip {
