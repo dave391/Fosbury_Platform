@@ -167,10 +167,25 @@ async def run_cycle():
                             result = {"executed": False, "reason": "unknown"}
                             if action == "SCALE_UP":
                                 params = decision.get("params") or {}
-                                result = await scale_up(db, exchange, adapter, strategy, float(params.get("excess_margin") or 0.0))
+                                excess_margin = float(params.get("excess_margin") or 0.0)
+                                logger.info(
+                                    "Strategy #%s: attempting %s | excess_margin=%s",
+                                    strategy_id,
+                                    action,
+                                    _fmt_num(excess_margin),
+                                )
+                                result = await scale_up(db, exchange, adapter, strategy, excess_margin)
                             elif action == "SCALE_DOWN":
-                                result = await scale_down(db, exchange, adapter, strategy, float(metrics.get("mark_price") or price))
+                                mark_price = float(metrics.get("mark_price") or price)
+                                logger.info(
+                                    "Strategy #%s: attempting %s | mark_price=%s",
+                                    strategy_id,
+                                    action,
+                                    _fmt_num(mark_price),
+                                )
+                                result = await scale_down(db, exchange, adapter, strategy, mark_price)
                             elif action == "EMERGENCY_CLOSE":
+                                logger.info("Strategy #%s: attempting %s", strategy_id, action)
                                 await stop(db, exchange, adapter, strategy)
                                 result = {"executed": True}
                             else:

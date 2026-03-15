@@ -20,6 +20,7 @@ from app.services.strategies.nv1.rules import (
     DEFAULT_LEVERAGE,
     MARGIN_SAFETY_BUFFER,
     MIN_ALLOCATION_PCT,
+    SCALE_UP_REMOVABLE_FACTOR,
     get_exchange_rules,
 )
 
@@ -244,11 +245,40 @@ async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
     current_margin = float((position_info or {}).get("margin") or 0.0)
     initial_margin = float((position_info or {}).get("initial_margin") or 0.0)
     unrealized_pnl = abs(float((position_info or {}).get("unrealized_pnl") or 0.0))
-    max_removable = max(float((current_margin - initial_margin - unrealized_pnl) * 0.995), 0.0)
+    removable_factor = float(SCALE_UP_REMOVABLE_FACTOR)
+    max_removable = max(float((current_margin - initial_margin - unrealized_pnl) * removable_factor), 0.0)
+    logger.info(
+        "nv1_scale_up_calc asset=%s perp=%s excess_margin=%.8f current_margin=%.8f initial_margin=%.8f unrealized_pnl=%.8f max_removable=%.8f factor=%.6f",
+        asset,
+        perp_symbol,
+        margin_to_use,
+        current_margin,
+        initial_margin,
+        unrealized_pnl,
+        max_removable,
+        removable_factor,
+    )
     if max_removable <= 0:
         return {"executed": False, "reason": "no removable margin available", "strategy": strategy}
     removable = min(float(margin_to_use), float(max_removable))
+    logger.info(
+        "nv1_scale_up_removable asset=%s perp=%s requested=%.8f removable=%.8f",
+        asset,
+        perp_symbol,
+        margin_to_use,
+        removable,
+    )
     remove_result = await adapter.remove_margin(exchange, perp_symbol, removable)
+    if isinstance(remove_result, dict):
+        logger.info(
+            "nv1_scale_up_remove_margin_result asset=%s perp=%s success=%s new_margin=%s liquidation_price=%s raw=%s",
+            asset,
+            perp_symbol,
+            remove_result.get("success"),
+            remove_result.get("new_margin"),
+            remove_result.get("liquidation_price"),
+            remove_result.get("raw_response"),
+        )
     if isinstance(remove_result, dict) and not remove_result.get("success", False):
         raise ValueError(remove_result.get("error") or "remove_margin failed")
     spot_price = await get_last_price(exchange, spot_symbol)

@@ -145,6 +145,7 @@ class StrategyService:
             strategy_key = str(strategy.strategy_key or self.default_strategy_key)
             strategy_impl = self._get_strategy_impl(strategy_key)
             quote_currency = self._get_quote_currency(strategy_impl, account.exchange_name if account else None)
+            min_remaining_capital = self._get_min_remaining_capital(strategy_impl)
             rows.append(
                 {
                     "id": strategy.id,
@@ -156,13 +157,14 @@ class StrategyService:
                     "apr_percent": 0.0,
                     "roi_percent": 0.0,
                     "days_active": days_active,
-                    "reduce_max_usdc": max(0.0, strategy.allocated_capital_usdc - 1),
+                    "reduce_max_usdc": max(0.0, strategy.allocated_capital_usdc - min_remaining_capital),
                     "exchange_account_id": strategy.exchange_account_id,
                     "exchange_name": account.exchange_name if account else None,
                     "exchange_available_usdc": available_by_pair.get(
                         (strategy.exchange_account_id, strategy_key), 0.0
                     ),
                     "quote_currency": quote_currency,
+                    "min_remaining_capital_usdc": min_remaining_capital,
                 }
             )
 
@@ -194,7 +196,8 @@ class StrategyService:
                 current_capital = row["allocated_capital_usdc"]
                 pnl_usdc = 0.0
             row["current_capital_usdc"] = current_capital
-            row["reduce_max_usdc"] = max(0.0, current_capital - 1)
+            min_remaining_capital = float(row.get("min_remaining_capital_usdc") or 1.0)
+            row["reduce_max_usdc"] = max(0.0, current_capital - min_remaining_capital)
             row["pnl_usdc"] = pnl_usdc
             if row["allocated_capital_usdc"] > 0:
                 row["roi_percent"] = (pnl_usdc / row["allocated_capital_usdc"]) * 100
@@ -313,6 +316,26 @@ class StrategyService:
             except Exception:
                 continue
         return "USDC"
+
+    def _get_min_remaining_capital(self, strategy_impl) -> float:
+        strategy_key = str(getattr(strategy_impl, "key", "") or "").strip()
+        module_name = str(getattr(strategy_impl.__class__, "__module__", "") or "").strip()
+        module_candidates = []
+        if strategy_key:
+            module_candidates.append(f"app.services.strategies.{strategy_key}.rules")
+        if module_name:
+            module_candidates.append(f"{module_name}.rules")
+            if "." in module_name:
+                module_candidates.append(f"{module_name.rsplit('.', 1)[0]}.rules")
+        for rules_module_name in module_candidates:
+            try:
+                rules_module = import_module(rules_module_name)
+                value = getattr(rules_module, "MIN_REMAINING_CAPITAL_USDC", None)
+                if value is not None:
+                    return max(0.0, float(value))
+            except Exception:
+                continue
+        return 1.0
 
     async def start_strategy(
         self,
