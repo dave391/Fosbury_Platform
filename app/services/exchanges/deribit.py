@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import ccxt.async_support as ccxt
 from app.services.exchanges.base import ExchangeAdapter
 
@@ -137,6 +137,81 @@ class DeribitExchange(ExchangeAdapter):
                     continue
                 fees_delta += float(fee)
         return funding_delta, fees_delta
+
+    async def fetch_position_info(self, exchange, symbol: str) -> Optional[Dict[str, Any]]:
+        position = None
+        try:
+            if hasattr(exchange, "fetch_position"):
+                position = await exchange.fetch_position(symbol)
+            else:
+                positions = await exchange.fetch_positions([symbol])
+                if positions:
+                    position = positions[0]
+        except Exception:
+            position = None
+        if not position:
+            try:
+                resp = await exchange.request(
+                    "get_position",
+                    "private",
+                    "GET",
+                    {"instrument_name": symbol},
+                )
+                position = resp.get("result") if isinstance(resp, dict) else resp
+            except Exception:
+                return None
+        if not isinstance(position, dict):
+            return None
+        data = position.get("info") if isinstance(position.get("info"), dict) else position
+        def to_float(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+        size = to_float(data.get("size"))
+        if not size:
+            return None
+        liquidation_price = to_float(data.get("estimated_liquidation_price"))
+        margin = to_float(data.get("maintenance_margin"))
+        initial_margin = to_float(data.get("initial_margin"))
+        if initial_margin is None:
+            initial_margin = to_float(data.get("initialMargin"))
+        mark_price = to_float(data.get("mark_price"))
+        unrealized_pnl = to_float(data.get("floating_profit_loss"))
+        leverage = to_float(data.get("leverage"))
+        return {
+            "liquidation_price": liquidation_price,
+            "margin": float(margin or 0.0),
+            "initial_margin": float(initial_margin) if initial_margin is not None else None,
+            "size": float(size),
+            "mark_price": float(mark_price or 0.0),
+            "unrealized_pnl": float(unrealized_pnl or 0.0),
+            "leverage": leverage,
+        }
+
+    async def add_margin(self, exchange, symbol: str, amount: float) -> Dict[str, Any]:
+        _ = amount
+        position = await self.fetch_position_info(exchange, symbol)
+        if not position:
+            return {"success": False, "error": "No open position found"}
+        return {
+            "success": True,
+            "new_margin": float(position.get("margin") or 0.0),
+            "liquidation_price": position.get("liquidation_price"),
+            "mark_price": float(position.get("mark_price") or 0.0),
+        }
+
+    async def remove_margin(self, exchange, symbol: str, amount: float) -> Dict[str, Any]:
+        _ = amount
+        position = await self.fetch_position_info(exchange, symbol)
+        if not position:
+            return {"success": False, "error": "No open position found"}
+        return {
+            "success": True,
+            "new_margin": float(position.get("margin") or 0.0),
+            "liquidation_price": position.get("liquidation_price"),
+            "mark_price": float(position.get("mark_price") or 0.0),
+        }
 
     async def fetch_quote_balance(self, exchange, quote: str) -> float:
         try:

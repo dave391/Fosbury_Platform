@@ -28,12 +28,17 @@
                     </select>
                 </div>
                 <div>
+                    <label class="block text-xs uppercase tracking-wider">Label</label>
+                    <input type="text" name="label" required placeholder="Account label"
+                           class="mt-1 block w-full input">
+                </div>
+                <div>
                     <label class="block text-xs uppercase tracking-wider">API Key</label>
                     <input type="text" name="api_key" required placeholder="API Key"
                            class="mt-1 block w-full input">
                 </div>
                 <div>
-                    <label class="block text-xs uppercase tracking-wider">Client Secret</label>
+                    <label class="block text-xs uppercase tracking-wider">Secret</label>
                     <div class="relative">
                         <input
                             type="password"
@@ -82,8 +87,9 @@
                 <tr>
                     <th class="px-4 py-2 text-left uppercase tracking-wider">Saved At</th>
                     <th class="px-4 py-2 text-left uppercase tracking-wider">Exchange</th>
+                    <th class="px-4 py-2 text-left uppercase tracking-wider">Label</th>
                     <th class="px-4 py-2 text-left uppercase tracking-wider">Client ID</th>
-                    <th class="px-4 py-2 text-left uppercase tracking-wider">Client Secret</th>
+                    <th class="px-4 py-2 text-left uppercase tracking-wider">Secret</th>
                     <th class="px-4 py-2"></th>
                 </tr>
             </thead>
@@ -120,6 +126,7 @@
                 <tr>
                     <td class="px-4 py-2">${c.created_at}</td>
                     <td class="px-4 py-2">${(c.exchange_name || "").toUpperCase()}</td>
+                    <td class="px-4 py-2">${c.label || ""}</td>
                     <td class="px-4 py-2">${c.client_id}</td>
                     <td class="px-4 py-2">${c.masked_secret}</td>
                     <td class="px-4 py-2 text-right">

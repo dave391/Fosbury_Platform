@@ -1,4 +1,5 @@
 from sqlalchemy import Column
+from sqlalchemy import Boolean
 from sqlalchemy import Date
 from sqlalchemy import DateTime
 from sqlalchemy import Float
@@ -87,6 +88,28 @@ class Strategy(Base):
     positions = relationship("StrategyPosition", back_populates="strategy")
     snapshots = relationship("EquitySnapshot", back_populates="strategy")
     closure = relationship("StrategyClosure", back_populates="strategy", uselist=False)
+    decision_logs = relationship("DecisionLog", back_populates="strategy")
+
+
+class DecisionLog(Base):
+    __tablename__ = "decision_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False, index=True)
+    strategy_key = Column(String, nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    last_seen = Column(DateTime(timezone=True), nullable=False)
+    action = Column(String, nullable=False)
+    reason = Column(String, nullable=True)
+    executed = Column(Boolean, nullable=True)
+    execution_error = Column(String, nullable=True)
+    price_at_decision = Column(Float, nullable=True)
+    liquidation_distance_pct = Column(Float, nullable=True)
+    excess_margin = Column(Float, nullable=True)
+    metrics_snapshot = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    strategy = relationship("Strategy", back_populates="decision_logs")
 
 
 class StrategyPosition(Base):

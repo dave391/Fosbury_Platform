@@ -7,10 +7,10 @@ from core.constants import MIN_ADD_CAPITAL_USDC, MIN_REMOVE_CAPITAL_USDC
 from typing import List, Optional, Dict, Any
 from app.services.exchange_service import ExchangeService
 from app.services.strategies.registry import get_strategy_registry, DEFAULT_STRATEGY_KEY
-from app.services.strategies.cash_funding.rules import get_exchange_rules
 from datetime import date, datetime, timezone, time
 import asyncio
 from uuid import uuid4
+from importlib import import_module
 
 class StrategyService:
     def __init__(self, db: AsyncSession):
@@ -19,11 +19,17 @@ class StrategyService:
         self.strategy_registry = get_strategy_registry()
         self.default_strategy_key = DEFAULT_STRATEGY_KEY
 
+    def get_available_strategies(self) -> List[Dict[str, str]]:
+        return [
+            {"key": key, "name": getattr(strategy_impl, "name", key)}
+            for key, strategy_impl in self.strategy_registry.items()
+        ]
+
     async def get_connected_exchange_names(self, user_id: int) -> List[str]:
         credentials = await self.exchange_service.get_configured_exchanges(user_id)
         exchanges = []
         for row in credentials:
-            name = row.get("exchange_name") if row else None
+            name = str(row.get("exchange_name") or "").strip().lower() if row else ""
             if name and name not in exchanges:
                 exchanges.append(name)
         return exchanges
@@ -92,46 +98,53 @@ class StrategyService:
             )
             accounts_by_id = {account.id: account for account in accounts_result.scalars().all()}
 
-        available_by_account = {}
+        available_by_pair = {}
         if accounts_by_id:
-            strategy_impl = self._get_strategy_impl()
             semaphore = asyncio.Semaphore(4)
             timeout_seconds = 6
 
-            async def fetch_balance(account_id: int, account: ExchangeAccount):
+            async def fetch_balance(account_id: int, strategy_key: str):
                 async with semaphore:
+                    account = accounts_by_id.get(account_id)
+                    if not account:
+                        return account_id, strategy_key, 0.0
                     exchange = await self.exchange_service.get_exchange_client_by_account(account_id)
                     if not exchange:
-                        return account_id, 0.0
+                        return account_id, strategy_key, 0.0
                     try:
+                        strategy_impl = self._get_strategy_impl(strategy_key)
                         adapter = self.exchange_service.get_exchange_adapter(account.exchange_name)
                         balance = await asyncio.wait_for(
                             strategy_impl.fetch_usdc_balance(exchange, adapter),
                             timeout=timeout_seconds,
                         )
-                        return account_id, balance
+                        return account_id, strategy_key, balance
                     except Exception:
-                        return account_id, 0.0
+                        return account_id, strategy_key, 0.0
                     finally:
                         await exchange.close()
 
+            account_strategy_pairs = {
+                (
+                    strategy.exchange_account_id,
+                    str(strategy.strategy_key or self.default_strategy_key),
+                )
+                for strategy in active_strategies
+            }
             tasks = [
-                fetch_balance(account_id, account)
-                for account_id, account in accounts_by_id.items()
+                fetch_balance(account_id, strategy_key)
+                for account_id, strategy_key in account_strategy_pairs
             ]
-            for account_id, balance in await asyncio.gather(*tasks):
-                available_by_account[account_id] = balance
+            for account_id, strategy_key, balance in await asyncio.gather(*tasks):
+                available_by_pair[(account_id, strategy_key)] = balance
 
         rows = []
         for strategy in active_strategies:
             days_active = max(1, (today - strategy.created_at.date()).days + 1)
             account = accounts_by_id.get(strategy.exchange_account_id)
-            quote_currency = "USDC"
-            if account and account.exchange_name:
-                try:
-                    quote_currency = (get_exchange_rules(account.exchange_name) or {}).get("quote") or "USDC"
-                except Exception:
-                    quote_currency = "USDC"
+            strategy_key = str(strategy.strategy_key or self.default_strategy_key)
+            strategy_impl = self._get_strategy_impl(strategy_key)
+            quote_currency = self._get_quote_currency(strategy_impl, account.exchange_name if account else None)
             rows.append(
                 {
                     "id": strategy.id,
@@ -146,7 +159,9 @@ class StrategyService:
                     "reduce_max_usdc": max(0.0, strategy.allocated_capital_usdc - 1),
                     "exchange_account_id": strategy.exchange_account_id,
                     "exchange_name": account.exchange_name if account else None,
-                    "exchange_available_usdc": available_by_account.get(strategy.exchange_account_id, 0.0),
+                    "exchange_available_usdc": available_by_pair.get(
+                        (strategy.exchange_account_id, strategy_key), 0.0
+                    ),
                     "quote_currency": quote_currency,
                 }
             )
@@ -201,34 +216,46 @@ class StrategyService:
         user_id: int,
         exchange_name: str = ExchangeName.DERIBIT,
         connected_exchanges: Optional[List[str]] = None,
+        strategy_key: Optional[str] = None,
+        exchange_account_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Prepares data for the strategy page, including active strategies and user balance.
         """
         if isinstance(exchange_name, ExchangeName):
             exchange_name = exchange_name.value
+        exchange_name = str(exchange_name or "").strip().lower()
         if connected_exchanges is None:
             connected_exchanges = await self.get_connected_exchange_names(user_id)
+        connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
         if connected_exchanges and exchange_name not in connected_exchanges:
             exchange_name = connected_exchanges[0]
         strategies = await self.get_active_strategies(user_id)
         
         usdc_balance = 0.0
-        has_credentials = bool(connected_exchanges)
-        strategy_impl = self._get_strategy_impl()
+        strategy_impl = self._get_strategy_impl(strategy_key)
+        selected_strategy_key = str(getattr(strategy_impl, "key", "") or self.default_strategy_key)
         allowed_assets = strategy_impl.get_allowed_assets(exchange_name)
         min_capital_usd = strategy_impl.get_min_capital()
-        try:
-            quote_currency = (get_exchange_rules(exchange_name) or {}).get("quote") or "USDC"
-        except Exception:
-            quote_currency = "USDC"
-        
-        if connected_exchanges and exchange_name in connected_exchanges:
-            account = await self.exchange_service.get_default_exchange_account(user_id, exchange_name)
-            exchange = await self.exchange_service.get_exchange_client_by_account(account.id) if account else None
+        quote_currency = self._get_quote_currency(strategy_impl, exchange_name)
+        exchange_accounts = await self.exchange_service.get_user_exchange_accounts(user_id, exchange_name)
+        has_credentials = bool(exchange_accounts)
+        selected_account = None
+        if exchange_account_id is not None:
+            selected_account = next(
+                (account for account in exchange_accounts if account["id"] == exchange_account_id),
+                None,
+            )
+        if selected_account is None and exchange_accounts:
+            selected_account = exchange_accounts[0]
+
+        if selected_account:
+            selected_exchange_name = str(selected_account.get("exchange_name") or exchange_name).strip().lower()
+            quote_currency = self._get_quote_currency(strategy_impl, selected_exchange_name)
+            exchange = await self.exchange_service.get_exchange_client_by_account(selected_account["id"])
             if exchange:
                 try:
-                    adapter = self.exchange_service.get_exchange_adapter(exchange_name)
+                    adapter = self.exchange_service.get_exchange_adapter(selected_exchange_name)
                     usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
                 except Exception:
                     pass
@@ -244,6 +271,10 @@ class StrategyService:
             "min_capital_usd": min_capital_usd,
             "exchange_name": exchange_name,
             "quote_currency": quote_currency,
+            "strategy_key": selected_strategy_key,
+            "available_strategies": self.get_available_strategies(),
+            "exchange_accounts": exchange_accounts,
+            "exchange_account_id": selected_account["id"] if selected_account else None,
         }
 
     async def _get_exchange_or_raise(self, exchange_account_id: int):
@@ -252,14 +283,56 @@ class StrategyService:
             raise ValueError("Exchange credentials missing.")
         return exchange
 
-    def _get_strategy_impl(self):
-        strategy_impl = self.strategy_registry.get(self.default_strategy_key)
+    def _get_strategy_impl(self, strategy_key: Optional[str] = None):
+        key = str(strategy_key or self.default_strategy_key).strip() or self.default_strategy_key
+        strategy_impl = self.strategy_registry.get(key)
         if not strategy_impl:
-            raise ValueError("Strategy not available.")
+            raise ValueError(f"Strategy '{key}' not available.")
         return strategy_impl
 
-    async def start_strategy(self, user_id: int, asset: str, capital_usdc: float, exchange_name: str = ExchangeName.DERIBIT) -> Strategy:
-        strategy_impl = self._get_strategy_impl()
+    def _get_quote_currency(self, strategy_impl, exchange_name: Optional[str]) -> str:
+        strategy_key = str(getattr(strategy_impl, "key", "") or "").strip()
+        module_name = str(getattr(strategy_impl.__class__, "__module__", "") or "").strip()
+        module_candidates = []
+        if strategy_key:
+            module_candidates.append(f"app.services.strategies.{strategy_key}.rules")
+        if module_name:
+            module_candidates.append(f"{module_name}.rules")
+            if "." in module_name:
+                module_candidates.append(f"{module_name.rsplit('.', 1)[0]}.rules")
+        for rules_module_name in module_candidates:
+            try:
+                rules_module = import_module(rules_module_name)
+                get_exchange_rules = getattr(rules_module, "get_exchange_rules", None)
+                if not callable(get_exchange_rules):
+                    continue
+                rules = get_exchange_rules(str(exchange_name or "").lower())
+                quote = (rules or {}).get("quote")
+                if quote:
+                    return quote
+            except Exception:
+                continue
+        return "USDC"
+
+    async def start_strategy(
+        self,
+        user_id: int,
+        asset: str,
+        capital_usdc: float,
+        exchange_name: str = ExchangeName.DERIBIT,
+        strategy_key: Optional[str] = None,
+        exchange_account_id: Optional[int] = None,
+    ) -> Strategy:
+        if not str(strategy_key or "").strip():
+            raise ValueError("Strategy selection is required.")
+        strategy_impl = self._get_strategy_impl(strategy_key)
+        selected_strategy_key = str(getattr(strategy_impl, "key", "") or self.default_strategy_key)
+        if exchange_account_id is None:
+            raise ValueError("Exchange account selection is required.")
+        account = await self.exchange_service.get_exchange_account(user_id, exchange_account_id)
+        if not account:
+            raise ValueError("Invalid exchange account.")
+        exchange_name = account.exchange_name
         allowed_assets = strategy_impl.get_allowed_assets(exchange_name)
         if allowed_assets and asset not in allowed_assets:
             raise ValueError(f"Invalid asset. Supported assets: {', '.join(allowed_assets)}")
@@ -267,19 +340,27 @@ class StrategyService:
         if capital_usdc < min_capital_usd:
             raise ValueError(f"Minimum capital is {min_capital_usd} USD.")
 
-        account = await self.exchange_service.get_default_exchange_account(user_id, exchange_name)
-        if not account:
-            raise ValueError("Exchange credentials missing.")
+        active_on_account_result = await self.db.execute(
+            select(Strategy).where(
+                Strategy.exchange_account_id == account.id,
+                Strategy.status == StrategyStatus.ACTIVE,
+            )
+        )
+        active_on_account = active_on_account_result.scalars().all()
+        if any(
+            str(strategy.strategy_key or self.default_strategy_key) != selected_strategy_key
+            for strategy in active_on_account
+        ):
+            raise ValueError("Another strategy is already active on this account.")
 
-        # Check if strategy already exists
-        result = await self.db.execute(
+        duplicate_result = await self.db.execute(
             select(Strategy).where(
                 Strategy.exchange_account_id == account.id,
                 Strategy.asset == asset,
                 Strategy.status == StrategyStatus.ACTIVE,
             )
         )
-        if result.scalars().first():
+        if duplicate_result.scalars().first():
             raise ValueError("Strategy already active for this asset.")
 
         exchange = await self._get_exchange_or_raise(account.id)
@@ -287,8 +368,11 @@ class StrategyService:
         try:
             adapter = self.exchange_service.get_exchange_adapter(account.exchange_name)
             usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
+            quote_currency = self._get_quote_currency(strategy_impl, account.exchange_name)
             if capital_usdc > usdc_balance:
-                raise ValueError(f"Insufficient USDC balance. Available: {usdc_balance}, Required: {capital_usdc}")
+                raise ValueError(
+                    f"Insufficient {quote_currency} balance. Available: {usdc_balance}, Required: {capital_usdc}"
+                )
 
             strategy = await strategy_impl.start(self.db, exchange, user_id, account.id, asset, capital_usdc)
             await self.db.commit()
@@ -311,10 +395,13 @@ class StrategyService:
 
         try:
             adapter = self.exchange_service.get_exchange_adapter(exchange.id)
-            strategy_impl = self._get_strategy_impl()
+            strategy_impl = self._get_strategy_impl(strategy.strategy_key)
             usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
+            quote_currency = self._get_quote_currency(strategy_impl, exchange.id)
             if added_amount_usdc > usdc_balance:
-                raise ValueError(f"Insufficient USDC balance. Available: {usdc_balance}, Required: {added_amount_usdc}")
+                raise ValueError(
+                    f"Insufficient {quote_currency} balance. Available: {usdc_balance}, Required: {added_amount_usdc}"
+                )
 
             await strategy_impl.add(self.db, exchange, strategy, added_amount_usdc)
             await self.db.commit()
@@ -336,7 +423,7 @@ class StrategyService:
         exchange = await self._get_exchange_or_raise(strategy.exchange_account_id)
 
         try:
-            strategy_impl = self._get_strategy_impl()
+            strategy_impl = self._get_strategy_impl(strategy.strategy_key)
             starting_capital = strategy.allocated_capital_usdc
             qty_removed = await strategy_impl.remove(self.db, exchange, strategy, remove_amount_usdc)
             if strategy.status == StrategyStatus.CLOSED:
@@ -360,7 +447,7 @@ class StrategyService:
         exchange = await self._get_exchange_or_raise(strategy.exchange_account_id)
 
         try:
-            strategy_impl = self._get_strategy_impl()
+            strategy_impl = self._get_strategy_impl(strategy.strategy_key)
             starting_capital = strategy.allocated_capital_usdc
             qty_closed = await strategy_impl.stop(self.db, exchange, strategy)
             if strategy.status == StrategyStatus.CLOSED:

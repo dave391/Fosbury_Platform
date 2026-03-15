@@ -57,13 +57,14 @@ async def save_config(
     api_key: str = Form(...),
     api_secret: str = Form(...),
     exchange_name: str = Form(...),
+    label: str = Form(...),
     user_id: int = Depends(require_user_id_html_dep),
     db: AsyncSession = Depends(get_db),
 ):
     service = ExchangeService(db)
     user_email = await get_user_email(user_id, db)
     try:
-        await service.save_credentials(user_id, api_key, api_secret, exchange_name)
+        await service.save_credentials(user_id, api_key, api_secret, exchange_name, label=label)
         msg = "Keys verified and saved successfully!"
         success = True
     except ValueError as e:

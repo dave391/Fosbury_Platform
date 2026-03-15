@@ -19,7 +19,8 @@
     <div class="mb-3 section-title">Start new strategy</div>
     <p class="mt-3 text-sm font-editorial loading-text" id="strategy-loading">Loading</p>
     <p class="mt-3 hidden text-sm font-editorial text-red-700" id="strategy-no-credentials">Connect exchange credentials in Exchanges.</p>
-    <form action="/strategy/start" method="post" class="mt-3 hidden" id="strategy-form" data-submit-feedback data-strategy-wizard data-confirm-form data-confirm-action="start" data-strategy-name="Cash and Funding">
+    <form action="/strategy/start" method="post" class="mt-3 hidden" id="strategy-form" data-submit-feedback data-strategy-wizard data-confirm-form data-confirm-action="start" data-strategy-name="Strategy">
+        <input type="hidden" name="strategy_key" value="{{ strategy_key }}" data-strategy-key-input>
         <div class="wizard-shell">
             <div class="card-surface p-4">
                 <div data-wizard-step="1" class="wizard-step">
@@ -27,19 +28,21 @@
                         <div class="space-y-3 wizard-step-stack">
                             <div class="text-xs uppercase tracking-wider text-white/60">Select strategy</div>
                             <div class="strategy-card-list">
-                                <button type="button" class="strategy-select-card strategy-select-card-active" data-strategy-card data-strategy-name="Cash and Funding" data-strategy-apy="8-10% APY" data-strategy-desc="Single-asset funding strategy with automatic allocation.">
+                                {% for strategy_item in available_strategies %}
+                                <button type="button" class="strategy-select-card {% if strategy_item.key == strategy_key %}strategy-select-card-active{% endif %}" data-strategy-card data-strategy-key="{{ strategy_item.key }}" data-strategy-name="{{ strategy_item.name }}" data-strategy-apy="Adaptive" data-strategy-desc="{{ strategy_item.name }}">
                                     <span class="strategy-icon">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                             <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                                         </svg>
                                     </span>
                                     <span class="flex-1 text-left">
-                                        <span class="block text-[0.6rem] uppercase tracking-wider text-white/60">Cash &amp; Funding</span>
-                                        <span class="block text-sm font-semibold">Cash and Funding</span>
-                                        <span class="mt-1 block text-xs text-white/60">Single-asset funding strategy with automatic allocation.</span>
+                                        <span class="block text-[0.6rem] uppercase tracking-wider text-white/60">{{ strategy_item.key }}</span>
+                                        <span class="block text-sm font-semibold">{{ strategy_item.name }}</span>
+                                        <span class="mt-1 block text-xs text-white/60">{{ strategy_item.name }}</span>
                                     </span>
-                                    <span class="strategy-apy">8-10% APY</span>
+                                    <span class="strategy-apy">Adaptive</span>
                                 </button>
+                                {% endfor %}
                             </div>
                         </div>
                         <div class="card-surface p-4 wizard-panel">
@@ -82,6 +85,14 @@
                                 </select>
                             </div>
                             <div>
+                                <label class="block text-xs uppercase tracking-wider">Account</label>
+                                <select name="exchange_account_id" id="strategy-account-select" class="mt-1 block w-full input" required>
+                                    {% for account in exchange_accounts %}
+                                    <option value="{{ account.id }}" {% if exchange_account_id == account.id %}selected{% endif %}>{{ account.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
                                 <label class="block text-xs uppercase tracking-wider">Trading Pair</label>
                                 <select name="asset" class="mt-1 block w-full input" required data-asset-select>
                                     <option value="" selected disabled>--</option>
@@ -109,7 +120,7 @@
                     <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 wizard-step-grid">
                         <div class="space-y-4 wizard-step-stack">
                             <div>
-                                <label class="block text-xs uppercase tracking-wider">Capital to deploy (<span data-quote-currency>{{ quote_currency }}</span>)</label>
+                                <label class="block text-xs uppercase tracking-wider">Capital to deploy</label>
                                 <div class="mt-2 capital-input" data-max-wrapper>
                                     <span class="capital-prefix">$</span>
                                     <input type="number" name="capital_usdc" max="{{ usdc_balance }}" step="1" required data-usdc-max data-max-input data-min-capital-input data-capital-input class="capital-field">
@@ -124,7 +135,7 @@
                                 <div class="mt-3 space-y-2 text-xs uppercase tracking-wider">
                                     <div class="flex items-center justify-between">
                                         <span>Strategy</span>
-                                        <span data-summary-strategy>Cash and Funding</span>
+                                        <span data-summary-strategy>Strategy</span>
                                     </div>
                                     <div class="flex items-center justify-between">
                                         <span>Exchange</span>
@@ -136,7 +147,7 @@
                                     </div>
                                     <div class="flex items-center justify-between">
                                         <span>Est. APY</span>
-                                        <span class="text-[#b59bff]" data-summary-apy>8-10% APY</span>
+                                        <span class="text-[#b59bff]" data-summary-apy>Adaptive</span>
                                     </div>
                                 </div>
                             </div>
@@ -201,9 +212,21 @@
 </div>
 <script>
     const exchangeSelect = document.getElementById("strategy-exchange-select")
+    const accountSelect = document.getElementById("strategy-account-select")
+    const strategyKeyInput = document.querySelector("[data-strategy-key-input]")
+    const getSelectedStrategyKey = () => {
+        const selectedCard = document.querySelector("[data-strategy-card].strategy-select-card-active")
+        if (strategyKeyInput && strategyKeyInput.value) return strategyKeyInput.value
+        return selectedCard ? selectedCard.dataset.strategyKey || "" : ""
+    }
     const loadStrategyData = () => {
         const exchangeName = exchangeSelect ? exchangeSelect.value : ""
-        const query = exchangeName ? `?exchange_name=${encodeURIComponent(exchangeName)}` : ""
+        const strategyKey = getSelectedStrategyKey()
+        const params = new URLSearchParams()
+        if (exchangeName) params.set("exchange_name", exchangeName)
+        if (strategyKey) params.set("strategy_key", strategyKey)
+        if (accountSelect && accountSelect.value) params.set("exchange_account_id", accountSelect.value)
+        const query = params.toString() ? `?${params.toString()}` : ""
         return fetch(`/strategy/data${query}`)
     }
     const upper = (value) => String(value || "").toUpperCase()
@@ -354,11 +377,41 @@
         const strategyName = selectedCard ? selectedCard.dataset.strategyName : "Strategy"
         const apy = selectedCard ? selectedCard.dataset.strategyApy : ""
         const exchangeValue = exchangeSelect ? exchangeSelect.value : ""
+        const accountLabel = accountSelect ? (accountSelect.selectedOptions[0] || {}).textContent || "" : ""
         const pairValue = (document.querySelector("[data-asset-select]") || {}).value || ""
         if (strategyEl) strategyEl.textContent = strategyName || "--"
-        if (exchangeEl) exchangeEl.textContent = exchangeValue ? upper(exchangeValue) : "--"
+        if (exchangeEl) {
+            const accountText = accountLabel ? ` · ${accountLabel}` : ""
+            exchangeEl.textContent = exchangeValue ? `${upper(exchangeValue)}${accountText}` : "--"
+        }
         if (pairEl) pairEl.textContent = pairValue ? upper(pairValue) : "--"
         if (apyEl) apyEl.textContent = apy || "--"
+    }
+    const syncAccountOptions = (data) => {
+        if (!accountSelect) return
+        const accounts = Array.isArray(data.exchange_accounts) ? data.exchange_accounts : []
+        const previousValue = accountSelect.value
+        accountSelect.innerHTML = ""
+        if (!accounts.length) {
+            accountSelect.disabled = true
+            const option = document.createElement("option")
+            option.value = ""
+            option.textContent = "--"
+            accountSelect.appendChild(option)
+            accountSelect.value = ""
+            return
+        }
+        accountSelect.disabled = false
+        for (const account of accounts) {
+            if (!account || !account.id) continue
+            const option = document.createElement("option")
+            option.value = String(account.id)
+            option.textContent = account.label || `Account ${account.id}`
+            accountSelect.appendChild(option)
+        }
+        const selectedValue = data.exchange_account_id ? String(data.exchange_account_id) : previousValue
+        const hasSelectedValue = Array.from(accountSelect.options).some((option) => option.value === selectedValue)
+        accountSelect.value = hasSelectedValue ? selectedValue : accountSelect.options[0].value
     }
     const updateAllocation = () => {
         const input = document.querySelector("[data-capital-input]")
@@ -395,6 +448,7 @@
             el.setAttribute("max", balance.toString())
         })
         document.querySelectorAll(".loading-text").forEach((el) => el.classList.remove("loading-text"))
+        syncAccountOptions(data)
 
         const assetSelect = document.querySelector("[data-asset-select]")
         if (assetSelect) {
@@ -434,14 +488,22 @@
             }
         })
     }
+    let strategyDataRequestId = 0
     const refreshStrategyData = () => {
+        const requestId = ++strategyDataRequestId
         loadStrategyData()
             .then((res) => res.json())
-            .then(applyStrategyData)
+            .then((data) => {
+                if (requestId !== strategyDataRequestId) return
+                applyStrategyData(data)
+            })
     }
     refreshStrategyData()
     if (exchangeSelect) {
         exchangeSelect.addEventListener("change", refreshStrategyData)
+    }
+    if (accountSelect) {
+        accountSelect.addEventListener("change", refreshStrategyData)
     }
     bindMaxButtons()
     bindSubmitFeedback()
@@ -488,23 +550,29 @@
         setStep(0)
     }
     const strategyCards = Array.from(document.querySelectorAll("[data-strategy-card]"))
-    const selectCard = (card) => {
+    const activateCard = (card) => {
         if (!card) return
         strategyCards.forEach((item) => item.classList.toggle("strategy-select-card-active", item === card))
         const form = document.getElementById("strategy-form")
+        if (strategyKeyInput && card.dataset.strategyKey) strategyKeyInput.value = card.dataset.strategyKey
         if (form) form.dataset.strategyName = card.dataset.strategyName || "Strategy"
         updateSummary()
     }
     strategyCards.forEach((card) => {
-        card.addEventListener("click", () => selectCard(card))
+        card.addEventListener("click", () => {
+            activateCard(card)
+            refreshStrategyData()
+        })
     })
     if (strategyCards.length) {
-        const activeCard = strategyCards.find((card) => card.classList.contains("strategy-select-card-active")) || strategyCards[0]
-        selectCard(activeCard)
+        const selectedKey = getSelectedStrategyKey()
+        const activeCard = strategyCards.find((card) => card.dataset.strategyKey === selectedKey) || strategyCards.find((card) => card.classList.contains("strategy-select-card-active")) || strategyCards[0]
+        activateCard(activeCard)
     }
     const assetSelect = document.querySelector("[data-asset-select]")
     if (assetSelect) assetSelect.addEventListener("change", updateSummary)
     if (exchangeSelect) exchangeSelect.addEventListener("change", updateSummary)
+    if (accountSelect) accountSelect.addEventListener("change", updateSummary)
     const capitalInput = document.querySelector("[data-capital-input]")
     if (capitalInput) capitalInput.addEventListener("input", updateAllocation)
 </script>

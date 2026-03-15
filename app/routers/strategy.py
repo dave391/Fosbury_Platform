@@ -12,11 +12,17 @@ from app.routers.shared import require_user_id_api_dep
 from app.routers.shared import require_user_id_html_dep
 from app.routers.shared import templates
 from app.services.strategy_service import StrategyService
-from app.services.strategies.cash_funding.rules import get_exchange_rules
 from core.database import get_db
 from core.enums import ExchangeName
 
 router = APIRouter()
+
+
+def _parse_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 async def render_strategy_page(
@@ -26,22 +32,29 @@ async def render_strategy_page(
     msg: str = None,
     success: bool = None,
     exchange_name: str = ExchangeName.DERIBIT,
+    strategy_key: str = None,
+    exchange_account_id: int = None,
     user_email: str = None,
 ):
     if isinstance(exchange_name, ExchangeName):
         exchange_name = exchange_name.value
+    exchange_name = str(exchange_name or "").strip().lower()
     connected_exchanges = await service.get_connected_exchange_names(user_id)
+    connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
     has_credentials = bool(connected_exchanges)
     if connected_exchanges and exchange_name not in connected_exchanges:
         exchange_name = connected_exchanges[0]
     exchanges = connected_exchanges if connected_exchanges else [e.value for e in ExchangeName]
-    strategies = await service.get_active_strategies(user_id)
+    data = await service.get_strategy_page_data(
+        user_id,
+        exchange_name,
+        connected_exchanges=connected_exchanges,
+        strategy_key=strategy_key,
+        exchange_account_id=exchange_account_id,
+    )
+    strategies = data.get("strategies") or []
     active_count = len(strategies)
     total_allocated = sum(strategy.allocated_capital_usdc for strategy in strategies)
-    try:
-        quote_currency = (get_exchange_rules(exchange_name) or {}).get("quote") or "USDC"
-    except Exception:
-        quote_currency = "USDC"
     return templates.TemplateResponse(
         "strategy.html",
         {
@@ -53,11 +66,15 @@ async def render_strategy_page(
             "active_count": active_count,
             "total_allocated": total_allocated,
             "has_strategies": active_count > 0,
-            "usdc_balance": 0.0,
-            "has_credentials": has_credentials,
-            "exchange_name": exchange_name,
+            "usdc_balance": data.get("usdc_balance", 0.0),
+            "has_credentials": data.get("has_credentials", has_credentials),
+            "exchange_name": data.get("exchange_name", exchange_name),
             "exchanges": exchanges,
-            "quote_currency": quote_currency,
+            "quote_currency": data.get("quote_currency"),
+            "available_strategies": data.get("available_strategies") or service.get_available_strategies(),
+            "strategy_key": data.get("strategy_key"),
+            "exchange_accounts": data.get("exchange_accounts") or [],
+            "exchange_account_id": data.get("exchange_account_id"),
         },
     )
 
@@ -71,11 +88,15 @@ async def strategy_page(
     service = StrategyService(db)
     user_email = await get_user_email(user_id, db)
     exchange_name = request.query_params.get("exchange_name") or ExchangeName.DERIBIT
+    strategy_key = request.query_params.get("strategy_key")
+    exchange_account_id = request.query_params.get("exchange_account_id")
     return await render_strategy_page(
         request,
         service,
         user_id,
         exchange_name=exchange_name,
+        strategy_key=strategy_key,
+        exchange_account_id=_parse_int(exchange_account_id),
         user_email=user_email,
     )
 
@@ -93,10 +114,18 @@ async def strategy_data(
     )
     if isinstance(exchange_name, ExchangeName):
         exchange_name = exchange_name.value
+    exchange_name = str(exchange_name or "").strip().lower()
+    connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
     if connected_exchanges and exchange_name not in connected_exchanges:
         exchange_name = connected_exchanges[0]
+    strategy_key = request.query_params.get("strategy_key")
+    exchange_account_id = request.query_params.get("exchange_account_id")
     data = await service.get_strategy_page_data(
-        user_id, exchange_name, connected_exchanges=connected_exchanges
+        user_id,
+        exchange_name,
+        connected_exchanges=connected_exchanges,
+        strategy_key=strategy_key,
+        exchange_account_id=_parse_int(exchange_account_id),
     )
     strategies = data.get("strategies") or []
     rows_data = await service.build_active_strategy_rows(user_id, strategies)
@@ -109,6 +138,10 @@ async def strategy_data(
             "allowed_assets": data.get("allowed_assets") or [],
             "min_capital_usd": data.get("min_capital_usd"),
             "quote_currency": data.get("quote_currency"),
+            "strategy_key": data.get("strategy_key"),
+            "available_strategies": data.get("available_strategies") or [],
+            "exchange_accounts": data.get("exchange_accounts") or [],
+            "exchange_account_id": data.get("exchange_account_id"),
             "active_strategies": rows,
             "active_count": len(rows),
         }
@@ -121,13 +154,22 @@ async def start_strategy(
     capital_usdc: float = Form(...),
     asset: str = Form(...),
     exchange_name: str = Form(...),
+    strategy_key: str = Form(None),
+    exchange_account_id: int = Form(...),
     user_id: int = Depends(require_user_id_html_dep),
     db: AsyncSession = Depends(get_db),
 ):
     service = StrategyService(db)
     user_email = await get_user_email(user_id, db)
     try:
-        await service.start_strategy(user_id, asset, capital_usdc, exchange_name)
+        await service.start_strategy(
+            user_id,
+            asset,
+            capital_usdc,
+            exchange_name,
+            strategy_key=strategy_key,
+            exchange_account_id=exchange_account_id,
+        )
         return RedirectResponse(url="/strategy", status_code=303)
     except ValueError as e:
         return await render_strategy_page(
@@ -137,6 +179,8 @@ async def start_strategy(
             str(e),
             False,
             exchange_name=exchange_name,
+            strategy_key=strategy_key,
+            exchange_account_id=exchange_account_id,
             user_email=user_email,
         )
     except Exception:
@@ -147,6 +191,8 @@ async def start_strategy(
             "Error starting strategy.",
             False,
             exchange_name=exchange_name,
+            strategy_key=strategy_key,
+            exchange_account_id=exchange_account_id,
             user_email=user_email,
         )
 

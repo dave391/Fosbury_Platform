@@ -24,10 +24,60 @@ class ExchangeService:
     async def get_default_exchange_account(self, user_id: int, exchange_name: str = ExchangeName.DERIBIT) -> Optional[ExchangeAccount]:
         result = await self.db.execute(
             select(ExchangeAccount)
-            .where(ExchangeAccount.user_id == user_id, ExchangeAccount.exchange_name == exchange_name)
+            .where(
+                ExchangeAccount.user_id == user_id,
+                ExchangeAccount.exchange_name == exchange_name,
+                ExchangeAccount.disabled_at.is_(None),
+            )
             .order_by(ExchangeAccount.created_at.desc())
         )
         return result.scalars().first()
+
+    async def get_exchange_account(self, user_id: int, exchange_account_id: int) -> Optional[ExchangeAccount]:
+        result = await self.db.execute(
+            select(ExchangeAccount).where(
+                ExchangeAccount.id == exchange_account_id,
+                ExchangeAccount.user_id == user_id,
+                ExchangeAccount.disabled_at.is_(None),
+            )
+        )
+        return result.scalars().first()
+
+    async def get_user_exchange_accounts(
+        self,
+        user_id: int,
+        exchange_name: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        query = (
+            select(ExchangeCredentials, ExchangeAccount)
+            .join(ExchangeAccount, ExchangeCredentials.exchange_account_id == ExchangeAccount.id)
+            .where(
+                ExchangeCredentials.user_id == user_id,
+                ExchangeCredentials.disabled_at.is_(None),
+                ExchangeAccount.disabled_at.is_(None),
+            )
+            .order_by(ExchangeCredentials.created_at.desc())
+        )
+        if exchange_name:
+            query = query.where(ExchangeAccount.exchange_name == exchange_name)
+        result = await self.db.execute(query)
+        rows = result.all()
+        accounts: Dict[int, Dict[str, Any]] = {}
+        for credentials, account in rows:
+            if account.id in accounts:
+                continue
+            try:
+                client_id = decrypt_data(credentials.encrypted_futures_api_key) if credentials.encrypted_futures_api_key else ""
+            except Exception:
+                client_id = ""
+            label = account.label or (f"API {client_id[:6]}..." if client_id else f"Account {account.id}")
+            accounts[account.id] = {
+                "id": account.id,
+                "exchange_name": account.exchange_name,
+                "label": label,
+                "client_id": client_id,
+            }
+        return list(accounts.values())
 
     async def get_or_create_default_exchange_account(
         self, user_id: int, exchange_name: str = ExchangeName.DERIBIT
@@ -84,16 +134,18 @@ class ExchangeService:
 
     async def get_configured_exchanges(self, user_id: int) -> List[Dict[str, Any]]:
         result = await self.db.execute(
-            select(ExchangeCredentials)
+            select(ExchangeCredentials, ExchangeAccount)
+            .join(ExchangeAccount, ExchangeCredentials.exchange_account_id == ExchangeAccount.id)
             .where(
                 ExchangeCredentials.user_id == user_id,
                 ExchangeCredentials.disabled_at.is_(None),
+                ExchangeAccount.disabled_at.is_(None),
             )
             .order_by(ExchangeCredentials.created_at.desc())
         )
-        rows = result.scalars().all()
+        rows = result.all()
         credentials_list = []
-        for row in rows:
+        for row, account in rows:
             try:
                 client_id = decrypt_data(row.encrypted_futures_api_key) if row.encrypted_futures_api_key else ""
             except Exception:
@@ -114,13 +166,24 @@ class ExchangeService:
                     "id": row.id,
                     "created_at": created_at,
                     "exchange_name": row.exchange_name or "",
+                    "label": account.label or "",
                     "client_id": client_id,
                     "masked_secret": masked_secret,
                 }
             )
         return credentials_list
 
-    async def save_credentials(self, user_id: int, api_key: str, api_secret: str, exchange_name: str = ExchangeName.DERIBIT) -> None:
+    async def save_credentials(
+        self,
+        user_id: int,
+        api_key: str,
+        api_secret: str,
+        exchange_name: str = ExchangeName.DERIBIT,
+        label: str = "",
+    ) -> None:
+        clean_label = str(label or "").strip()
+        if not clean_label:
+            raise ValueError("Label is required.")
         existing_result = await self.db.execute(
             select(ExchangeCredentials)
             .where(
@@ -148,7 +211,9 @@ class ExchangeService:
         except Exception as e:
             raise ValueError(f"Credential validation error: {e}")
         
-        account = await self.get_or_create_default_exchange_account(user_id, exchange_name)
+        account = ExchangeAccount(user_id=user_id, exchange_name=exchange_name, label=clean_label)
+        self.db.add(account)
+        await self.db.flush()
         credentials = ExchangeCredentials(
             user_id=user_id,
             exchange_name=exchange_name,
