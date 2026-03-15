@@ -15,6 +15,7 @@ from app.services.exchange_service import ExchangeService
 from app.services.strategies.common import get_last_price
 from app.services.strategies.nv1.logic import ensure_strategy_config, scale_down, scale_up, stop
 from app.services.strategies.nv1.position_manager import compute_metrics
+from app.services.strategies.nv1.rules import get_default_thresholds
 from app.services.strategies.nv1.strategy_engine import DEFAULT_THRESHOLDS, decide
 from core.database import AsyncSessionLocal
 from core.enums import StrategyStatus
@@ -32,8 +33,9 @@ def _fmt_num(value, digits: int = 2) -> str:
         return "n/a"
 
 
-def _build_thresholds(config: dict) -> dict:
-    return {key: config.get(key, value) for key, value in DEFAULT_THRESHOLDS.items()}
+def _build_thresholds() -> dict:
+    thresholds = get_default_thresholds()
+    return {key: thresholds.get(key, value) for key, value in DEFAULT_THRESHOLDS.items()}
 
 
 async def _log_decision_state(
@@ -139,7 +141,7 @@ async def run_cycle():
                         strategy_config = strategy.config or {}
                         decision = decide(
                             metrics,
-                            _build_thresholds(strategy_config),
+                            _build_thresholds(),
                             last_action_timestamp=strategy_config.get("last_action_timestamp"),
                         )
                         action = decision.get("action")
