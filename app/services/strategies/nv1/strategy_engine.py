@@ -1,15 +1,9 @@
 import time
 from typing import Any, Dict, Optional
 
+from app.services.strategies.nv1.rules import get_default_thresholds
 
-DEFAULT_THRESHOLDS = {
-    "safe_distance_pct": 15.0,
-    "warning_distance_pct": 5.0,
-    "critical_distance_pct": 2.0,
-    "min_excess_margin": 1.0,
-    "max_delta_mismatch_pct": 2.0,
-    "cooldown_seconds": 300,
-}
+DEFAULT_THRESHOLDS = get_default_thresholds()
 
 
 def decide(metrics: Dict[str, Any], thresholds: Dict[str, Any], last_action_timestamp: Optional[float] = None) -> Dict[str, Any]:
