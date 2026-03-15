@@ -8,6 +8,18 @@ from app.services.exchanges.base import ExchangeAdapter
 logger = logging.getLogger(__name__)
 
 
+def _raw_error(exc: Exception):
+    response = getattr(exc, "response", None)
+    if response is not None:
+        return response
+    body = getattr(exc, "body", None)
+    if body is not None:
+        return body
+    if getattr(exc, "args", None):
+        return exc.args
+    return str(exc)
+
+
 class BitmexExchange(ExchangeAdapter):
     async def get_client(self, api_key: str, api_secret: str):
         return ccxt.bitmex({"apiKey": api_key, "secret": api_secret, "enableRateLimit": True})
@@ -368,12 +380,21 @@ class BitmexExchange(ExchangeAdapter):
             amount_units = int(round(float(amount) * 1_000_000))
         else:
             amount_units = int(round(float(amount)))
-        return await exchange.request(
+        response = await exchange.request(
             "position/transferMargin",
             "private",
             "POST",
             {"symbol": market_id, "amount": amount_units},
         )
+        logger.info(
+            "bitmex_transfer_margin symbol=%s market_id=%s amount=%.8f amount_units=%s raw=%s",
+            symbol,
+            market_id,
+            float(amount),
+            amount_units,
+            response,
+        )
+        return response
 
     async def ensure_isolated_margin(
         self, exchange, symbol: str, target_leverage: Optional[float] = None
@@ -419,20 +440,24 @@ class BitmexExchange(ExchangeAdapter):
 
     async def add_margin(self, exchange, symbol: str, amount: float) -> Dict[str, Any]:
         try:
-            await self._transfer_isolated_margin(exchange, symbol, abs(float(amount)))
+            transfer_raw = await self._transfer_isolated_margin(exchange, symbol, abs(float(amount)))
             updated = await self.fetch_position_info(exchange, symbol)
             if not updated:
-                return {"success": False, "error": "No open position found", "new_margin": None, "liquidation_price": None}
-            return {"success": True, "new_margin": float(updated.get("margin") or 0.0), "liquidation_price": updated.get("liquidation_price")}
+                return {"success": False, "error": "No open position found", "new_margin": None, "liquidation_price": None, "raw_response": transfer_raw}
+            return {"success": True, "new_margin": float(updated.get("margin") or 0.0), "liquidation_price": updated.get("liquidation_price"), "raw_response": transfer_raw}
         except Exception as e:
-            return {"success": False, "error": str(e), "new_margin": None, "liquidation_price": None}
+            error_raw = _raw_error(e)
+            logger.error("bitmex_add_margin_failed symbol=%s amount=%.8f raw=%s", symbol, float(amount), error_raw)
+            return {"success": False, "error": str(e), "new_margin": None, "liquidation_price": None, "raw_response": error_raw}
 
     async def remove_margin(self, exchange, symbol: str, amount: float) -> Dict[str, Any]:
         try:
-            await self._transfer_isolated_margin(exchange, symbol, -abs(float(amount)))
+            transfer_raw = await self._transfer_isolated_margin(exchange, symbol, -abs(float(amount)))
             updated = await self.fetch_position_info(exchange, symbol)
             if not updated:
-                return {"success": False, "error": "No open position found", "new_margin": None, "liquidation_price": None}
-            return {"success": True, "new_margin": float(updated.get("margin") or 0.0), "liquidation_price": updated.get("liquidation_price")}
+                return {"success": False, "error": "No open position found", "new_margin": None, "liquidation_price": None, "raw_response": transfer_raw}
+            return {"success": True, "new_margin": float(updated.get("margin") or 0.0), "liquidation_price": updated.get("liquidation_price"), "raw_response": transfer_raw}
         except Exception as e:
-            return {"success": False, "error": str(e), "new_margin": None, "liquidation_price": None}
+            error_raw = _raw_error(e)
+            logger.error("bitmex_remove_margin_failed symbol=%s amount=%.8f raw=%s", symbol, float(amount), error_raw)
+            return {"success": False, "error": str(e), "new_margin": None, "liquidation_price": None, "raw_response": error_raw}
