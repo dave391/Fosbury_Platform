@@ -12,7 +12,8 @@ if PROJECT_ROOT not in sys.path:
 from sqlalchemy import select, update
 
 from app.services.exchange_service import ExchangeService
-from app.services.strategies.nv1.logic import ensure_strategy_config, get_last_price, scale_down, scale_up, stop
+from app.services.strategies.common import get_last_price
+from app.services.strategies.nv1.logic import ensure_strategy_config, scale_down, scale_up, stop
 from app.services.strategies.nv1.position_manager import compute_metrics
 from app.services.strategies.nv1.strategy_engine import DEFAULT_THRESHOLDS, decide
 from core.database import AsyncSessionLocal

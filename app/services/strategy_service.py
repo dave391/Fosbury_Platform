@@ -29,7 +29,7 @@ class StrategyService:
         credentials = await self.exchange_service.get_configured_exchanges(user_id)
         exchanges = []
         for row in credentials:
-            name = row.get("exchange_name") if row else None
+            name = str(row.get("exchange_name") or "").strip().lower() if row else ""
             if name and name not in exchanges:
                 exchanges.append(name)
         return exchanges
@@ -224,8 +224,10 @@ class StrategyService:
         """
         if isinstance(exchange_name, ExchangeName):
             exchange_name = exchange_name.value
+        exchange_name = str(exchange_name or "").strip().lower()
         if connected_exchanges is None:
             connected_exchanges = await self.get_connected_exchange_names(user_id)
+        connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
         if connected_exchanges and exchange_name not in connected_exchanges:
             exchange_name = connected_exchanges[0]
         strategies = await self.get_active_strategies(user_id)
@@ -248,10 +250,12 @@ class StrategyService:
             selected_account = exchange_accounts[0]
 
         if selected_account:
+            selected_exchange_name = str(selected_account.get("exchange_name") or exchange_name).strip().lower()
+            quote_currency = self._get_quote_currency(strategy_impl, selected_exchange_name)
             exchange = await self.exchange_service.get_exchange_client_by_account(selected_account["id"])
             if exchange:
                 try:
-                    adapter = self.exchange_service.get_exchange_adapter(exchange_name)
+                    adapter = self.exchange_service.get_exchange_adapter(selected_exchange_name)
                     usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
                 except Exception:
                     pass
@@ -287,18 +291,27 @@ class StrategyService:
         return strategy_impl
 
     def _get_quote_currency(self, strategy_impl, exchange_name: Optional[str]) -> str:
-        try:
-            module_name = strategy_impl.__class__.__module__
-            rules_module_name = f"{module_name.rsplit('.', 1)[0]}.rules"
-            rules_module = import_module(rules_module_name)
-            get_exchange_rules = getattr(rules_module, "get_exchange_rules", None)
-            if callable(get_exchange_rules):
+        strategy_key = str(getattr(strategy_impl, "key", "") or "").strip()
+        module_name = str(getattr(strategy_impl.__class__, "__module__", "") or "").strip()
+        module_candidates = []
+        if strategy_key:
+            module_candidates.append(f"app.services.strategies.{strategy_key}.rules")
+        if module_name:
+            module_candidates.append(f"{module_name}.rules")
+            if "." in module_name:
+                module_candidates.append(f"{module_name.rsplit('.', 1)[0]}.rules")
+        for rules_module_name in module_candidates:
+            try:
+                rules_module = import_module(rules_module_name)
+                get_exchange_rules = getattr(rules_module, "get_exchange_rules", None)
+                if not callable(get_exchange_rules):
+                    continue
                 rules = get_exchange_rules(str(exchange_name or "").lower())
                 quote = (rules or {}).get("quote")
                 if quote:
                     return quote
-        except Exception:
-            pass
+            except Exception:
+                continue
         return "USDC"
 
     async def start_strategy(
@@ -355,8 +368,11 @@ class StrategyService:
         try:
             adapter = self.exchange_service.get_exchange_adapter(account.exchange_name)
             usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
+            quote_currency = self._get_quote_currency(strategy_impl, account.exchange_name)
             if capital_usdc > usdc_balance:
-                raise ValueError(f"Insufficient USDC balance. Available: {usdc_balance}, Required: {capital_usdc}")
+                raise ValueError(
+                    f"Insufficient {quote_currency} balance. Available: {usdc_balance}, Required: {capital_usdc}"
+                )
 
             strategy = await strategy_impl.start(self.db, exchange, user_id, account.id, asset, capital_usdc)
             await self.db.commit()
@@ -381,8 +397,11 @@ class StrategyService:
             adapter = self.exchange_service.get_exchange_adapter(exchange.id)
             strategy_impl = self._get_strategy_impl(strategy.strategy_key)
             usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
+            quote_currency = self._get_quote_currency(strategy_impl, exchange.id)
             if added_amount_usdc > usdc_balance:
-                raise ValueError(f"Insufficient USDC balance. Available: {usdc_balance}, Required: {added_amount_usdc}")
+                raise ValueError(
+                    f"Insufficient {quote_currency} balance. Available: {usdc_balance}, Required: {added_amount_usdc}"
+                )
 
             await strategy_impl.add(self.db, exchange, strategy, added_amount_usdc)
             await self.db.commit()

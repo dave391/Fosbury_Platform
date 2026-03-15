@@ -1,5 +1,5 @@
 STRATEGY_KEY = "nv1"
-STRATEGY_NAME = "NV1 - Delta Neutral Stablecoin Margin"
+STRATEGY_NAME = "Neutro V1"
 FEE_BUFFER = 1.002
 MIN_CAPITAL_USD = 25
 DEFAULT_LEVERAGE = 5.0
@@ -16,7 +16,7 @@ DEFAULT_COOLDOWN_SECONDS = 300
 EXCHANGE_RULES = {
     "deribit": {
         "enabled": True,
-        "assets": ["BTC", "ETH"],
+        "assets": ["BTC", "ETH", "SOL", "XRP","BNB","PAXG"],
         "quote": "USDC",
         "spot_asset_aliases": {"ETH": "STETH"},
         "perp_size_mode": "base",
@@ -24,7 +24,7 @@ EXCHANGE_RULES = {
     },
     "bitmex": {
         "enabled": True,
-        "assets": ["BTC", "ETH", "SOL", "XRP","SUI"],
+        "assets": ["BTC", "ETH", "SOL", "XRP","HYPE","LINK","POL","UNI","BMEX"],
         "quote": "USDT",
         "spot_asset_aliases": {},
         "perp_size_mode": "auto",

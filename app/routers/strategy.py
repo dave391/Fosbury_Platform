@@ -38,7 +38,9 @@ async def render_strategy_page(
 ):
     if isinstance(exchange_name, ExchangeName):
         exchange_name = exchange_name.value
+    exchange_name = str(exchange_name or "").strip().lower()
     connected_exchanges = await service.get_connected_exchange_names(user_id)
+    connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
     has_credentials = bool(connected_exchanges)
     if connected_exchanges and exchange_name not in connected_exchanges:
         exchange_name = connected_exchanges[0]
@@ -112,6 +114,8 @@ async def strategy_data(
     )
     if isinstance(exchange_name, ExchangeName):
         exchange_name = exchange_name.value
+    exchange_name = str(exchange_name or "").strip().lower()
+    connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
     if connected_exchanges and exchange_name not in connected_exchanges:
         exchange_name = connected_exchanges[0]
     strategy_key = request.query_params.get("strategy_key")

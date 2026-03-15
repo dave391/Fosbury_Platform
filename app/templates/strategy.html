@@ -120,7 +120,7 @@
                     <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 wizard-step-grid">
                         <div class="space-y-4 wizard-step-stack">
                             <div>
-                                <label class="block text-xs uppercase tracking-wider">Capital to deploy (<span data-quote-currency>{{ quote_currency }}</span>)</label>
+                                <label class="block text-xs uppercase tracking-wider">Capital to deploy</label>
                                 <div class="mt-2 capital-input" data-max-wrapper>
                                     <span class="capital-prefix">$</span>
                                     <input type="number" name="capital_usdc" max="{{ usdc_balance }}" step="1" required data-usdc-max data-max-input data-min-capital-input data-capital-input class="capital-field">
@@ -488,10 +488,15 @@
             }
         })
     }
+    let strategyDataRequestId = 0
     const refreshStrategyData = () => {
+        const requestId = ++strategyDataRequestId
         loadStrategyData()
             .then((res) => res.json())
-            .then(applyStrategyData)
+            .then((data) => {
+                if (requestId !== strategyDataRequestId) return
+                applyStrategyData(data)
+            })
     }
     refreshStrategyData()
     if (exchangeSelect) {
