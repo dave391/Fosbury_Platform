@@ -8,7 +8,6 @@ from typing import List, Optional, Dict, Any
 from app.services.exchange_service import ExchangeService
 from app.services.strategies.registry import get_strategy_registry, DEFAULT_STRATEGY_KEY
 from datetime import date, datetime, timezone, time
-import asyncio
 from uuid import uuid4
 from importlib import import_module
 
@@ -98,45 +97,10 @@ class StrategyService:
             )
             accounts_by_id = {account.id: account for account in accounts_result.scalars().all()}
 
-        available_by_pair = {}
-        if accounts_by_id:
-            semaphore = asyncio.Semaphore(4)
-            timeout_seconds = 6
-
-            async def fetch_balance(account_id: int, strategy_key: str):
-                async with semaphore:
-                    account = accounts_by_id.get(account_id)
-                    if not account:
-                        return account_id, strategy_key, 0.0
-                    exchange = await self.exchange_service.get_exchange_client_by_account(account_id)
-                    if not exchange:
-                        return account_id, strategy_key, 0.0
-                    try:
-                        strategy_impl = self._get_strategy_impl(strategy_key)
-                        adapter = self.exchange_service.get_exchange_adapter(account.exchange_name)
-                        balance = await asyncio.wait_for(
-                            strategy_impl.fetch_usdc_balance(exchange, adapter),
-                            timeout=timeout_seconds,
-                        )
-                        return account_id, strategy_key, balance
-                    except Exception:
-                        return account_id, strategy_key, 0.0
-                    finally:
-                        await exchange.close()
-
-            account_strategy_pairs = {
-                (
-                    strategy.exchange_account_id,
-                    str(strategy.strategy_key or self.default_strategy_key),
-                )
-                for strategy in active_strategies
-            }
-            tasks = [
-                fetch_balance(account_id, strategy_key)
-                for account_id, strategy_key in account_strategy_pairs
-            ]
-            for account_id, strategy_key, balance in await asyncio.gather(*tasks):
-                available_by_pair[(account_id, strategy_key)] = balance
+        available_by_pair = {
+            account.id: float(account.cached_balance_usdc or 0.0)
+            for account in accounts_by_id.values()
+        }
 
         rows = []
         for strategy in active_strategies:
@@ -160,9 +124,7 @@ class StrategyService:
                     "reduce_max_usdc": max(0.0, strategy.allocated_capital_usdc - min_remaining_capital),
                     "exchange_account_id": strategy.exchange_account_id,
                     "exchange_name": account.exchange_name if account else None,
-                    "exchange_available_usdc": available_by_pair.get(
-                        (strategy.exchange_account_id, strategy_key), 0.0
-                    ),
+                    "exchange_available_usdc": available_by_pair.get(strategy.exchange_account_id, 0.0),
                     "quote_currency": quote_currency,
                     "min_remaining_capital_usdc": min_remaining_capital,
                 }
@@ -255,15 +217,16 @@ class StrategyService:
         if selected_account:
             selected_exchange_name = str(selected_account.get("exchange_name") or exchange_name).strip().lower()
             quote_currency = self._get_quote_currency(strategy_impl, selected_exchange_name)
-            exchange = await self.exchange_service.get_exchange_client_by_account(selected_account["id"])
-            if exchange:
-                try:
-                    adapter = self.exchange_service.get_exchange_adapter(selected_exchange_name)
-                    usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
-                except Exception:
-                    pass
-                finally:
-                    await exchange.close()
+            account_result = await self.db.execute(
+                select(ExchangeAccount).where(
+                    ExchangeAccount.id == selected_account["id"],
+                    ExchangeAccount.user_id == user_id,
+                    ExchangeAccount.disabled_at.is_(None),
+                )
+            )
+            account = account_result.scalars().first()
+            if account:
+                usdc_balance = float(account.cached_balance_usdc or 0.0)
                 
         return {
             "user_id": user_id,
