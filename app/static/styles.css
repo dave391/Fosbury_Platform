@@ -354,7 +354,6 @@ body {
 }
 
 .wizard-step {
-  display: block;
   min-height: 380px;
 }
 
