@@ -265,8 +265,9 @@
                     </div>
                 </div>
             </div>
+<script id="dashboard-data" type="application/json">{{ dashboard_json | safe }}</script>
 <script>
-    const url = "/dashboard/data"
+    const dashboardData = JSON.parse(document.getElementById("dashboard-data")?.textContent || "{}")
     const formatUsd = (value) => new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: "USD",
@@ -890,10 +891,10 @@
             setEquityView(view)
         })
     })
-    fetch(url)
-        .then((res) => res.json())
-        .then((data) => {
-            if (!data || data.error) return
+    {
+        const data = dashboardData
+        if (!data || data.error) {
+        } else {
             const metrics = data.metrics || {}
             const setText = (id, value) => {
                 const el = document.getElementById(id)
@@ -926,7 +927,8 @@
             equityState.max = data.equity_max ?? 0
             equityState.dates = data.equity_dates || []
             setEquityView("cumulative")
-        })
+        }
+    }
     window.addEventListener("resize", () => {
         if (equityState.allSeries.length) renderEquity()
     })

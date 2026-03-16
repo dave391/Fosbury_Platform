@@ -1,130 +1,107 @@
-PROBLEMA
-Ogni volta che un utente apre /dashboard o /strategy, il sistema chiama gli exchange
-(Deribit, Bitmex) via CCXT per fetchare i balance. Ogni chiamata richiede 500ms-2s.
-Con più strategie attive, il page load arriva a 3-6 secondi.
-I punti esatti dove succede:
+Due problemi residui nel caricamento della pagina:
 
-build_active_strategy_rows in strategy_service.py: crea task async con semaphore,
-apre client CCXT per ogni account, chiama fetch_usdc_balance, poi chiude il client.
-Questo viene chiamato sia dalla dashboard che dalla strategy page.
-get_strategy_page_data in strategy_service.py: apre un client CCXT per leggere
-il balance da mostrare nella pagina strategy.
+Font: il link Google Fonts in base.html carica pesi non usati e un font
+(IBM Plex Mono) che serve solo come fallback. Inoltre mancano i tag preconnect.
+Immagini: logo_dark.png è 143KB e 1917×2350px, ma viene visualizzato a
+60×60px (classe .sidebar-logo). logo.png è 57KB e 2000×2424px, usato solo
+come favicon. Totale: 200KB di immagini enormi per un logo di 60px.
 
 OBIETTIVO
-Spostare il fetch dei balance in un cronjob dedicato. Le pagine web leggono solo dal database.
+Ridurre il peso dei font e delle immagini senza cambiare l'aspetto visivo.
 COSA FARE
-A. Migrazione schema
-Aggiungere due colonne alla tabella exchange_accounts in core/models.py:
+A. Ottimizzare i font in base.html
+Ho verificato nella codebase quali font e pesi sono effettivamente usati:
+Inter (font principale):
 
-cached_balance_usdc (Float, nullable, default None)
-balance_updated_at (DateTime con timezone, nullable, default None)
+weight 400: usato (testo base)
+weight 600: usato (font-semibold, font-weight:600 in styles.css)
+weight 700: usato (font-bold, font-weight:700 in styles.css)
+weight 300: NON usato → rimuovere
+weight 500: NON usato → rimuovere
 
-Creare uno script di migrazione in scripts/ seguendo lo stesso pattern degli script
-esistenti (migrate_add_decision_log.py, migrate_add_strategies_tables.py).
-Usare ALTER TABLE ... ADD COLUMN IF NOT EXISTS per renderlo idempotente.
-B. Nuovo cronjob run_balance_cache.py
-Creare scripts/cronjob/run_balance_cache.py come file NUOVO e SEPARATO.
-NON modificare run_equity_snapshot_batch.py — sono due job con responsabilità diverse:
+IBM Plex Mono: referenziato SOLO come fallback nel body font-family in styles.css:
+font-family: "Inter", "IBM Plex Mono", monospace;
+Non è mai usato direttamente. monospace copre già il caso fallback.
+→ Rimuovere dal Google Fonts.
+→ Aggiornare font-family in styles.css a: font-family: "Inter", sans-serif;
+Merriweather: usato tramite la classe .font-editorial che appare in vari template.
 
-equity_snapshot gira 1 volta al giorno, fotografa l'equity delle strategie
-balance_cache gira ogni 5-10 minuti, aggiorna il balance degli account
+weight 300: NON usato (.font-editorial non imposta un weight, il default è 400)
+weight 400: usato
+weight 700: verificare se combinato con font-bold su un elemento .font-editorial.
+Se non sicuro, tenerlo per sicurezza.
 
-Seguire esattamente lo stesso pattern strutturale di run_equity_snapshot_batch.py:
+Modificare base.html:
 
-Usa AsyncSessionLocal da core.database
-Stessa struttura: load → loop → try/except per account → commit → log riepilogativo
-Eseguibile con: python -m scripts.cronjob.run_balance_cache
+AGGIUNGERE prima del link ai font:
 
-Logica del cronjob:
+html   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-Caricare TUTTI gli ExchangeAccount con disabled_at IS NULL
-Per ogni account, determinare quale strategy_key usare per fetch_usdc_balance:
+SOSTITUIRE il link Google Fonts attuale con:
 
-Cercare le Strategy attive (status=ACTIVE) su quell'account
-Se ci sono strategy attive: usare la strategy_key della prima trovata.
-(In pratica ogni account ha una sola strategy_key attiva — il sistema lo impone
-in start_strategy. Il "prima trovata" è solo un fallback difensivo.)
-Se NON ci sono strategy attive: usare DEFAULT_STRATEGY_KEY dal registry
-(cash_funding). Questo serve perché un utente potrebbe avere un account
-collegato senza strategie attive, e la pagina /strategy deve comunque
-mostrare il balance disponibile.
+html   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
 
+In app/static/styles.css, modificare il body font-family:
 
-Ottenere la strategy_impl dal registry con quella key
-Aprire il client CCXT tramite ExchangeService.get_exchange_client_by_account
-Chiamare strategy_impl.fetch_usdc_balance(exchange, adapter) per ottenere il balance
-Salvare il risultato:
+css   font-family: "Inter", sans-serif;
+B. Ottimizzare le immagini logo
+logo_dark.png (navbar): 1917×2350px, 143KB.
+Viene visualizzato a 60×60px (.sidebar-logo: width 3.75rem; height 3.75rem).
+Per retina display serve 2× = 120×120px. L'immagine è ~20 volte più grande del necessario.
+logo.png (favicon): 2000×2424px, 57KB. I favicon non hanno bisogno di più di 192×192px.
+Cosa fare:
 
-account.cached_balance_usdc = balance
-account.balance_updated_at = datetime.now(timezone.utc)
+Con Python + Pillow (pip install Pillow — solo per la conversione, NON come
+dipendenza runtime):
 
+python   from PIL import Image
 
-Chiudere SEMPRE il client CCXT (nel finally)
-Se un account fallisce (errore CCXT, credenziali invalide, timeout), loggare
-l'errore e continuare con il prossimo account. Mai bloccare il job.
-A fine ciclo, stampare un log riepilogativo come fa run_equity_snapshot_batch:
-totale account, aggiornati con successo, saltati per errore.
+   # logo_dark: ridimensiona a 120x120 (2× retina) e converti in WebP
+   img = Image.open("app/static/logo_dark.png")
+   # Mantieni l'aspect ratio, ridimensiona al lato più corto = 120
+   img.thumbnail((120, 120), Image.LANCZOS)
+   img.save("app/static/logo_dark.webp", "webp", quality=90)
 
-C. Rimuovere le chiamate exchange da build_active_strategy_rows
-In strategy_service.py, nel metodo build_active_strategy_rows:
-ELIMINARE tutta la sezione che contiene:
+   # logo: ridimensiona a 192x192 per favicon
+   img = Image.open("app/static/logo.png")
+   img.thumbnail((192, 192), Image.LANCZOS)
+   img.save("app/static/logo.png", "png", optimize=True)
 
-La variabile available_by_pair
-Il semaphore = asyncio.Semaphore(4)
-La funzione interna async def fetch_balance
-Il set account_strategy_pairs
-La lista tasks
-Il asyncio.gather(*tasks)
+In base.html, per la navbar sostituire:
 
-SOSTITUIRE con una lettura diretta dal campo cache. L'oggetto account è già
-caricato in accounts_by_id. Per ogni account, il balance è semplicemente:
-account.cached_balance_usdc or 0.0
-Il campo exchange_available_usdc nella riga viene popolato da questo valore
-invece che da available_by_pair.
-D. Rimuovere la chiamata exchange da get_strategy_page_data
-In strategy_service.py, nel metodo get_strategy_page_data:
-ELIMINARE la sezione che fa:
+html   <img src="/static/logo_dark.png" ...>
+con:
+html   <picture>
+     <source srcset="/static/logo_dark.webp" type="image/webp">
+     <img src="/static/logo_dark.png" alt="Fosbury Platform" class="sidebar-logo">
+   </picture>
 
-exchange = await self.exchange_service.get_exchange_client_by_account(...)
-usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
-Il blocco try/except/finally con exchange.close()
+TENERE anche i PNG originali nel repo (come fallback per browser vecchi).
+Ma i file originali vanno RIDIMENSIONATI — non ha senso servire un PNG di
+1917×2350px come fallback per un logo di 60px:
 
-SOSTITUIRE con: caricare l'ExchangeAccount selezionato e leggere
-account.cached_balance_usdc or 0.0 come usdc_balance.
-L'account selezionato è già identificato dalla logica esistente (selected_account).
-Basta fare una query per l'ExchangeAccount con quell'id (o aggiungerlo al
-dizionario exchange_accounts che già viene costruito).
-E. NON TOCCARE le operazioni live
-Le seguenti funzioni DEVONO continuare a chiamare l'exchange in tempo reale:
+python   # Ridimensiona anche il PNG fallback
+   img = Image.open("app/static/logo_dark.png")
+   img.thumbnail((120, 120), Image.LANCZOS)
+   img.save("app/static/logo_dark.png", "png", optimize=True)
 
-start_strategy — verifica il balance reale prima di aprire posizioni
-add_capital — verifica il balance reale prima di aggiungere capitale
-remove_capital — esegue operazioni sull'exchange
-stop_strategy — esegue operazioni sull'exchange
+NON convertire il favicon in WebP (non tutti i browser supportano favicon WebP).
 
-Queste sono azioni utente che richiedono dati live. Il cache è solo per
-la visualizzazione. Se il balance cachato non corrisponde a quello reale al momento
-dell'azione, l'utente riceve un messaggio di errore ("Insufficient balance") —
-che è il comportamento corretto e sicuro.
-NOTA SUL DATABASE
-Questo cambiamento NON fa crescere il database. Non aggiungiamo righe — aggiungiamo
-due colonne a una tabella esistente. Il cronjob AGGIORNA le colonne, non crea
-nuove righe. Se ci sono 10 account, restano 10 righe.
 VINCOLI
 
-Codice snello, non verboso
-Segui lo stesso stile del resto della codebase
-Il cronjob è un file nuovo e separato, non va nel cronjob esistente
-Non aggiungere dipendenze
-Non toccare le operazioni live (start/add/remove/stop)
+Non aggiungere Pillow come dipendenza runtime (solo per la conversione una tantum)
+Le immagini devono apparire identiche a prima nel browser
+Non cambiare le classi CSS o le dimensioni di visualizzazione
+Non rompere il layout della navbar
 
 TEST DI VERIFICA
 
-Lo script di migrazione gira senza errori e aggiunge le colonne
-python -m scripts.cronjob.run_balance_cache gira e popola cached_balance_usdc
-su tutti gli account attivi (con e senza strategie attive)
-GET /dashboard risponde sotto 500ms senza chiamate exchange (nessun log CCXT)
-GET /strategy mostra il balance corretto letto dal cache
-start/add/remove/stop continuano a funzionare con chiamate exchange live
-Se un account ha credenziali invalide, il cronjob logga l'errore e continua
-con gli altri account senza bloccarsi
+Le pagine hanno lo stesso aspetto visivo di prima
+Il logo nella navbar è nitido (non sfocato o pixelato)
+Il favicon funziona
+Il link Google Fonts non include IBM Plex Mono, Inter 300, Inter 500
+I tag preconnect sono presenti nel <head>
+Il peso totale delle immagini logo è ridotto significativamente
+(da ~200KB a ~5-10KB)
+Il font-family nel body usa "Inter", sans-serif

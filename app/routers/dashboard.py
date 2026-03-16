@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Request
@@ -24,12 +26,26 @@ async def dashboard(
     service = DashboardService(db)
     data = await service.get_dashboard_data(
         user_id,
-        include_equity_series=False,
+        include_equity_series=True,
+    )
+    dashboard_json = json.dumps(
+        {
+            "metrics": data.get("metrics"),
+            "total_balance_usdc": data.get("total_balance_usdc"),
+            "current_balance_usdc": data.get("current_balance_usdc"),
+            "terminated_pnl_usdc": data.get("terminated_pnl_usdc"),
+            "cumulative_pnl_usdc": data.get("cumulative_pnl_usdc"),
+            "equity_series": data.get("equity_series"),
+            "equity_min": data.get("equity_min"),
+            "equity_max": data.get("equity_max"),
+            "equity_dates": data.get("equity_dates"),
+        },
+        default=str,
     )
     user_email = await get_user_email(user_id, db)
     return templates.TemplateResponse(
         "dashboard.html",
-        {"request": request, "user_email": user_email, **data},
+        {"request": request, "user_email": user_email, "dashboard_json": dashboard_json, **data},
     )
 
 
