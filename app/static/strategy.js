@@ -155,6 +155,8 @@
         })
     }
     let latestBalance = 0
+    let refreshLiveBalance = () => {}
+    let liveBalanceRequestId = 0
     const updateSummary = () => {
         const strategyEl = document.querySelector("[data-summary-strategy]")
         const exchangeEl = document.querySelector("[data-summary-exchange]")
@@ -209,6 +211,44 @@
         if (donut) donut.style.setProperty("--alloc-percent", `${percent}%`)
         if (percentEl) percentEl.textContent = `${Math.round(percent)}%`
     }
+    const fetchLiveBalance = () => {
+        const exchangeAccountId = accountSelect ? accountSelect.value : ""
+        const strategyKey = getSelectedStrategyKey()
+        if (!exchangeAccountId || !strategyKey) return
+        const requestId = ++liveBalanceRequestId
+        document.querySelectorAll("[data-usdc-balance]").forEach((el) => {
+            el.textContent = "Loading..."
+        })
+        const params = new URLSearchParams()
+        params.set("exchange_account_id", exchangeAccountId)
+        params.set("strategy_key", strategyKey)
+        fetch(`/strategy/live-balance?${params.toString()}`)
+            .then((res) => res.json())
+            .then((data) => {
+                if (requestId !== liveBalanceRequestId) return
+                const balance = Number(data && data.balance ? data.balance : 0)
+                latestBalance = balance
+                document.querySelectorAll("[data-usdc-balance]").forEach((el) => {
+                    el.textContent = balance.toFixed(2)
+                })
+                document.querySelectorAll("[data-usdc-max]").forEach((el) => {
+                    el.setAttribute("max", balance.toString())
+                })
+                const quoteCurrency = String((data && data.quote_currency) || "").trim() || "USD"
+                document.querySelectorAll("[data-quote-currency]").forEach((el) => {
+                    el.textContent = quoteCurrency
+                })
+                updateAllocation()
+            })
+            .catch(() => {
+                if (requestId !== liveBalanceRequestId) return
+                const balance = Number(latestBalance || 0)
+                document.querySelectorAll("[data-usdc-balance]").forEach((el) => {
+                    el.textContent = balance.toFixed(2)
+                })
+                updateAllocation()
+            })
+    }
     const applyStrategyData = (data) => {
         if (!data || data.error) return
         const loadingEl = document.getElementById("strategy-loading")
@@ -252,6 +292,7 @@
         }
         updateSummary()
         updateAllocation()
+        refreshLiveBalance()
 
         const minCapital = Number(data.min_capital_usd)
         document.querySelectorAll("[data-min-capital-input]").forEach((input) => {
@@ -326,6 +367,10 @@
                 submitBtn.classList.toggle("hidden", !isLast)
                 submitBtn.style.display = isLast ? "" : "none"
             }
+            if (currentStep === steps.length - 1) fetchLiveBalance()
+        }
+        refreshLiveBalance = () => {
+            if (currentStep === steps.length - 1) fetchLiveBalance()
         }
         const validateStep = (index) => {
             const step = steps[index]
