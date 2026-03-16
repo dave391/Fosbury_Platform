@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Form
@@ -146,6 +148,45 @@ async def strategy_data(
             "active_count": len(rows),
         }
     )
+
+
+@router.get("/strategy/live-balance")
+async def strategy_live_balance(
+    exchange_account_id: int,
+    strategy_key: str,
+    user_id: int = Depends(require_user_id_api_dep),
+    db: AsyncSession = Depends(get_db),
+):
+    service = StrategyService(db)
+    quote_currency = "USD"
+    fallback_balance = 0.0
+    account = await service.exchange_service.get_exchange_account(user_id, exchange_account_id)
+    if not account:
+        return JSONResponse(
+            {"balance": fallback_balance, "quote_currency": quote_currency, "error": "Invalid exchange account."}
+        )
+    fallback_balance = float(account.cached_balance_usdc or 0.0)
+    exchange = None
+    try:
+        strategy_impl = service._get_strategy_impl(strategy_key)
+        quote_currency = service._get_quote_currency(strategy_impl, account.exchange_name)
+        exchange = await service.exchange_service.get_exchange_client_by_account(account.id)
+        if not exchange:
+            raise ValueError("Exchange credentials missing.")
+        adapter = service.exchange_service.get_exchange_adapter(account.exchange_name)
+        balance = await asyncio.wait_for(strategy_impl.fetch_usdc_balance(exchange, adapter), timeout=6)
+        return JSONResponse({"balance": float(balance or 0.0), "quote_currency": quote_currency})
+    except Exception as exc:
+        error = "Exchange timeout." if isinstance(exc, asyncio.TimeoutError) else str(exc)
+        return JSONResponse(
+            {"balance": fallback_balance, "quote_currency": quote_currency, "error": error}
+        )
+    finally:
+        if exchange:
+            try:
+                await exchange.close()
+            except Exception:
+                pass
 
 
 @router.post("/strategy/start")

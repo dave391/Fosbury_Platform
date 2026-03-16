@@ -22,6 +22,16 @@ app = FastAPI(
     redoc_url="/redoc" if docs_enabled else None,
     openapi_url="/openapi.json" if docs_enabled else None,
 )
+
+
+@app.middleware("http")
+async def static_cache_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(router)
 
