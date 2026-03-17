@@ -27,10 +27,17 @@ async def config_page(
     service = ExchangeService(db)
     user_email = await get_user_email(user_id, db)
     credentials = await service.get_configured_exchanges(user_id)
+    msg = request.query_params.get("msg")
+    success_raw = request.query_params.get("success")
+    success = None
+    if success_raw is not None:
+        success = success_raw == "1"
     return templates.TemplateResponse(
         "config.html",
         {
             "request": request,
+            "msg": msg,
+            "success": success,
             "user_id": user_id,
             "user_email": user_email,
             "has_credentials": bool(credentials),
@@ -99,3 +106,20 @@ async def disconnect_credentials(
     await service.delete_credentials(user_id, credentials_id)
 
     return RedirectResponse(url="/config", status_code=303)
+
+
+@router.post("/config/modify")
+async def modify_credentials(
+    request: Request,
+    credentials_id: int = Form(...),
+    api_key: str = Form(...),
+    api_secret: str = Form(...),
+    user_id: int = Depends(require_user_id_html_dep),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ExchangeService(db)
+    try:
+        await service.update_credentials(user_id, credentials_id, api_key, api_secret)
+    except Exception:
+        return RedirectResponse(url="/config?msg=Unable+to+update+credentials&success=0", status_code=303)
+    return RedirectResponse(url="/config?msg=Credentials+updated+successfully&success=1", status_code=303)

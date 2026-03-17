@@ -235,3 +235,33 @@ class ExchangeService:
         if credentials:
             credentials.disabled_at = datetime.now(timezone.utc)
             await self.db.commit()
+
+    async def update_credentials(
+        self,
+        user_id: int,
+        credentials_id: int,
+        api_key: str,
+        api_secret: str,
+    ) -> None:
+        result = await self.db.execute(
+            select(ExchangeCredentials, ExchangeAccount)
+            .join(ExchangeAccount, ExchangeCredentials.exchange_account_id == ExchangeAccount.id)
+            .where(
+                ExchangeCredentials.id == credentials_id,
+                ExchangeCredentials.user_id == user_id,
+                ExchangeCredentials.disabled_at.is_(None),
+                ExchangeAccount.disabled_at.is_(None),
+            )
+        )
+        row = result.first()
+        if not row:
+            raise ValueError("Credentials not found.")
+        credentials, account = row
+        adapter = self._get_exchange_adapter(account.exchange_name)
+        try:
+            await adapter.validate_credentials(api_key, api_secret)
+        except Exception as e:
+            raise ValueError(f"Credential validation error: {e}")
+        credentials.encrypted_futures_api_key = encrypt_data(api_key)
+        credentials.encrypted_futures_api_secret = encrypt_data(api_secret)
+        await self.db.commit()
