@@ -97,11 +97,6 @@ class StrategyService:
             )
             accounts_by_id = {account.id: account for account in accounts_result.scalars().all()}
 
-        available_by_pair = {
-            account.id: float(account.cached_balance_usdc or 0.0)
-            for account in accounts_by_id.values()
-        }
-
         rows = []
         for strategy in active_strategies:
             days_active = max(1, (today - strategy.created_at.date()).days + 1)
@@ -124,7 +119,7 @@ class StrategyService:
                     "reduce_max_usdc": max(0.0, strategy.allocated_capital_usdc - min_remaining_capital),
                     "exchange_account_id": strategy.exchange_account_id,
                     "exchange_name": account.exchange_name if account else None,
-                    "exchange_available_usdc": available_by_pair.get(strategy.exchange_account_id, 0.0),
+                    "strategy_key": strategy_key,
                     "quote_currency": quote_currency,
                     "min_remaining_capital_usdc": min_remaining_capital,
                 }

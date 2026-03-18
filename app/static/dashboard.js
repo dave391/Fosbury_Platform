@@ -542,18 +542,21 @@
     const manageCancel = manageModal ? manageModal.querySelector("[data-manage-cancel]") : null
     const manageIdInput = manageModal ? manageModal.querySelector("[data-strategy-id-input]") : null
     const manageAvailableQuote = manageModal ? manageModal.querySelector("[data-available-quote]") : null
-    const openManage = (button) => {
+    let manageBalanceRequestId = 0
+    const openManage = async (button) => {
         if (!manageModal || !manageForm) return
+        const currentRequestId = ++manageBalanceRequestId
         const strategyId = button.dataset.strategyId || ""
+        const strategyKey = button.dataset.strategyKey || ""
+        const exchangeAccountId = button.dataset.exchangeAccountId || ""
         const name = button.dataset.strategyName || "Strategy"
         const asset = button.dataset.asset || ""
         const exchangeName = button.dataset.exchangeName || ""
         const quote = button.dataset.quoteCurrency || "USDC"
-        const exchangeAvailable = Number(button.dataset.exchangeAvailable || 0)
         const reduceMax = Number(button.dataset.reduceMax || 0)
-        manageForm.dataset.addMax = exchangeAvailable.toString()
+        manageForm.dataset.addMax = "0"
         manageForm.dataset.removeMax = reduceMax.toString()
-        manageForm.dataset.addAvailable = formatNumber(exchangeAvailable)
+        manageForm.dataset.addAvailable = "0.00"
         manageForm.dataset.removeAvailable = formatNumber(reduceMax)
         manageForm.dataset.strategyName = name
         manageForm.dataset.asset = asset
@@ -564,6 +567,32 @@
         applyToggleState(manageForm, manageForm.dataset.action || "add")
         manageModal.classList.remove("hidden")
         manageModal.classList.add("flex")
+        if (!strategyKey || !exchangeAccountId) return
+        try {
+            manageForm.dataset.addAvailable = "Loading..."
+            applyToggleState(manageForm, manageForm.dataset.action || "add")
+            const params = new URLSearchParams({
+                exchange_account_id: exchangeAccountId,
+                strategy_key: strategyKey,
+            })
+            const response = await fetch(`/strategy/live-balance?${params.toString()}`, {
+                headers: { Accept: "application/json" },
+            })
+            const payload = await response.json()
+            if (currentRequestId !== manageBalanceRequestId) return
+            const balance = Number(payload?.balance || 0)
+            manageForm.dataset.addMax = balance.toString()
+            manageForm.dataset.addAvailable = formatNumber(balance)
+            const liveQuote = payload?.quote_currency || quote
+            manageForm.dataset.quoteCurrency = liveQuote
+            if (manageAvailableQuote) manageAvailableQuote.textContent = liveQuote
+            applyToggleState(manageForm, manageForm.dataset.action || "add")
+        } catch (error) {
+            if (currentRequestId !== manageBalanceRequestId) return
+            manageForm.dataset.addMax = "0"
+            manageForm.dataset.addAvailable = "0.00"
+            applyToggleState(manageForm, manageForm.dataset.action || "add")
+        }
     }
     const closeManage = () => {
         if (!manageModal) return
@@ -670,7 +699,9 @@
     document.querySelectorAll("[data-manage-open]").forEach((button) => {
         if (button.dataset.manageBound) return
         button.dataset.manageBound = "1"
-        button.addEventListener("click", () => openManage(button))
+        button.addEventListener("click", () => {
+            openManage(button)
+        })
     })
     if (manageCancel) {
         manageCancel.addEventListener("click", () => closeManage())

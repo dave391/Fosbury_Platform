@@ -153,13 +153,11 @@ async def strategy_live_balance(
 ):
     service = StrategyService(db)
     quote_currency = "USD"
-    fallback_balance = 0.0
     account = await service.exchange_service.get_exchange_account(user_id, exchange_account_id)
     if not account:
         return JSONResponse(
-            {"balance": fallback_balance, "quote_currency": quote_currency, "error": "Invalid exchange account."}
+            {"balance": 0.0, "quote_currency": quote_currency, "error": "Invalid exchange account."}
         )
-    fallback_balance = float(account.cached_balance_usdc or 0.0)
     exchange = None
     try:
         strategy_impl = service._get_strategy_impl(strategy_key)
@@ -173,7 +171,7 @@ async def strategy_live_balance(
     except Exception as exc:
         error = "Exchange timeout." if isinstance(exc, asyncio.TimeoutError) else str(exc)
         return JSONResponse(
-            {"balance": fallback_balance, "quote_currency": quote_currency, "error": error}
+            {"balance": 0.0, "quote_currency": quote_currency, "error": error}
         )
     finally:
         if exchange:
