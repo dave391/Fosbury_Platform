@@ -5,9 +5,6 @@ from app.services.strategies.nv1 import NV1Strategy
 from app.services.strategies.nv1.rules import STRATEGY_KEY as NV1_KEY
 
 
-DEFAULT_STRATEGY_KEY = CF_KEY
-
-
 def get_strategy_registry() -> StrategyRegistry:
     return {
         CF_KEY: CashFundingStrategy(),

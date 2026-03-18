@@ -32,6 +32,14 @@ EXCHANGE_RULES = {
         "perp_size_mode": "auto",
         "partial_allocation_allowed": True,
     },
+    "hyperliquid": {
+        "enabled": True,
+        "assets": ["BTC", "ETH", "SOL", "HYPE"],
+        "quote": "USDC",
+        "spot_asset_aliases": {},
+        "perp_size_mode": "base",
+        "partial_allocation_allowed": True,
+    },
 }
 
 

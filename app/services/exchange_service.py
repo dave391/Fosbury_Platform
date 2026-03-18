@@ -12,6 +12,14 @@ class ExchangeService:
         self.db = db
         self.exchange_registry = get_exchange_registry()
 
+    def _normalize_exchange_name(self, exchange_name: Any) -> str:
+        if hasattr(exchange_name, "value"):
+            exchange_name = getattr(exchange_name, "value")
+        name = str(exchange_name or "").strip()
+        if "." in name:
+            name = name.rsplit(".", 1)[-1]
+        return name.lower()
+
     def _get_exchange_adapter(self, exchange_name: str):
         adapter = self.exchange_registry.get(exchange_name)
         if not adapter:
@@ -73,7 +81,7 @@ class ExchangeService:
             label = account.label or (f"API {client_id[:6]}..." if client_id else f"Account {account.id}")
             accounts[account.id] = {
                 "id": account.id,
-                "exchange_name": account.exchange_name,
+                "exchange_name": self._normalize_exchange_name(account.exchange_name),
                 "label": label,
                 "client_id": client_id,
             }
@@ -165,7 +173,7 @@ class ExchangeService:
                 {
                     "id": row.id,
                     "created_at": created_at,
-                    "exchange_name": row.exchange_name or "",
+                    "exchange_name": self._normalize_exchange_name(row.exchange_name),
                     "label": account.label or "",
                     "client_id": client_id,
                     "masked_secret": masked_secret,

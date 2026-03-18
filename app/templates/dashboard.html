@@ -109,7 +109,7 @@
                                     </div>
                                 </div>
                                 <div class="mt-4 flex flex-wrap items-center gap-2">
-                                    <button type="button" class="btn-inline btn-secondary btn-inline-manage" data-manage-open data-strategy-id="{{ s.id }}" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}" data-exchange-available="{{ s.exchange_available_usdc }}" data-reduce-max="{{ s.reduce_max_usdc }}">Manage</button>
+                                    <button type="button" class="btn-inline btn-secondary btn-inline-manage" data-manage-open data-strategy-id="{{ s.id }}" data-strategy-key="{{ s.strategy_key }}" data-exchange-account-id="{{ s.exchange_account_id }}" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}" data-reduce-max="{{ s.reduce_max_usdc }}">Manage</button>
                                     <form action="/strategy/stop" method="post" class="flex" data-confirm-form data-confirm-action="stop" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}">
                                         <input type="hidden" name="strategy_id" value="{{ s.id }}">
                                         <button type="submit" class="btn-inline btn-secondary">Stop Strategy</button>

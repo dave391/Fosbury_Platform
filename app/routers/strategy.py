@@ -44,9 +44,6 @@ async def render_strategy_page(
     connected_exchanges = await service.get_connected_exchange_names(user_id)
     connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
     has_credentials = bool(connected_exchanges)
-    if connected_exchanges and exchange_name not in connected_exchanges:
-        exchange_name = connected_exchanges[0]
-    exchanges = connected_exchanges if connected_exchanges else [e.value for e in ExchangeName]
     data = await service.get_strategy_page_data(
         user_id,
         exchange_name,
@@ -71,7 +68,7 @@ async def render_strategy_page(
             "usdc_balance": data.get("usdc_balance", 0.0),
             "has_credentials": data.get("has_credentials", has_credentials),
             "exchange_name": data.get("exchange_name", exchange_name),
-            "exchanges": exchanges,
+            "exchanges": data.get("exchanges") or [],
             "quote_currency": data.get("quote_currency"),
             "available_strategies": data.get("available_strategies") or service.get_available_strategies(),
             "strategy_key": data.get("strategy_key"),
@@ -111,15 +108,11 @@ async def strategy_data(
 ):
     service = StrategyService(db)
     connected_exchanges = await service.get_connected_exchange_names(user_id)
-    exchange_name = request.query_params.get("exchange_name") or (
-        connected_exchanges[0] if connected_exchanges else ExchangeName.DERIBIT
-    )
+    exchange_name = request.query_params.get("exchange_name") or ""
     if isinstance(exchange_name, ExchangeName):
         exchange_name = exchange_name.value
     exchange_name = str(exchange_name or "").strip().lower()
     connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
-    if connected_exchanges and exchange_name not in connected_exchanges:
-        exchange_name = connected_exchanges[0]
     strategy_key = request.query_params.get("strategy_key")
     exchange_account_id = request.query_params.get("exchange_account_id")
     data = await service.get_strategy_page_data(
@@ -142,6 +135,7 @@ async def strategy_data(
             "quote_currency": data.get("quote_currency"),
             "strategy_key": data.get("strategy_key"),
             "available_strategies": data.get("available_strategies") or [],
+            "exchanges": data.get("exchanges") or [],
             "exchange_accounts": data.get("exchange_accounts") or [],
             "exchange_account_id": data.get("exchange_account_id"),
             "active_strategies": rows,
@@ -159,13 +153,11 @@ async def strategy_live_balance(
 ):
     service = StrategyService(db)
     quote_currency = "USD"
-    fallback_balance = 0.0
     account = await service.exchange_service.get_exchange_account(user_id, exchange_account_id)
     if not account:
         return JSONResponse(
-            {"balance": fallback_balance, "quote_currency": quote_currency, "error": "Invalid exchange account."}
+            {"balance": 0.0, "quote_currency": quote_currency, "error": "Invalid exchange account."}
         )
-    fallback_balance = float(account.cached_balance_usdc or 0.0)
     exchange = None
     try:
         strategy_impl = service._get_strategy_impl(strategy_key)
@@ -179,7 +171,7 @@ async def strategy_live_balance(
     except Exception as exc:
         error = "Exchange timeout." if isinstance(exc, asyncio.TimeoutError) else str(exc)
         return JSONResponse(
-            {"balance": fallback_balance, "quote_currency": quote_currency, "error": error}
+            {"balance": 0.0, "quote_currency": quote_currency, "error": error}
         )
     finally:
         if exchange:

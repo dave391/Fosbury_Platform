@@ -1,86 +1,43 @@
-Nella pagina /strategy c'è un wizard a 3 step per lanciare una nuova strategia.
-Allo step 3 ("Capital to deploy") c'è il campo "Available: x.xx USDT/USDC" che
-mostra il saldo di stablecoin disponibili sull'exchange per aprire nuove posizioni.
-Oggi quel dato viene dal campo cached_balance_usdc nel database, aggiornato dal
-cronjob ogni 5-10 minuti. Ma questo dato può essere stale: se l'utente ha appena
-fermato una strategia, le stablecoin si liberano immediatamente sull'exchange ma
-il cache non lo sa ancora.
-Il campo "Available" deve mostrare il dato LIVE dall'exchange, non il cache.
+Su Hyperliquid c'è un mismatch tra la size spot e perp perché
+_align_base_to_perp_precision in common.py scatta solo per Bitmex.
+Per gli altri exchange ritorna base_amount invariato, e poi
+spot_amount_to_precision e perp_amount_to_precision arrotondano
+indipendentemente con precision diverse.
+
 OBIETTIVO
-Creare un endpoint API leggero che restituisce il balance live delle stablecoin
-da un exchange account specifico. Il JS chiama questo endpoint quando l'utente
-arriva allo step 3 del wizard.
+Fare in modo che _align_base_to_perp_precision applichi l'arrotondamento
+alla precision del perp per TUTTI gli exchange, non solo Bitmex.
+Questo garantisce che spot e perp partano dalla stessa base amount.
+
 COSA FARE
-A. Nuovo endpoint in app/routers/strategy.py
-Aggiungere un endpoint GET /strategy/live-balance che:
 
-Riceve come query params: exchange_account_id (int) e strategy_key (string)
-Carica l'ExchangeAccount e verifica che appartenga all'utente
-Crea il client CCXT tramite exchange_service.get_exchange_client_by_account
-Ottiene la strategy_impl dal registry con la strategy_key
-Chiama strategy_impl.fetch_usdc_balance(exchange, adapter) — questo restituisce
-il saldo delle stablecoin (USDC su Deribit, USDT su Bitmex) disponibili per
-aprire nuove posizioni, NON il balance complessivo dell'account
-Chiude il client CCXT (nel finally)
-Restituisce JSON: {"balance": <float>, "quote_currency": <string>}
+In app/services/strategies/common.py, modifica _align_base_to_perp_precision.
 
-In caso di errore (account non trovato, credenziali mancanti, exchange timeout):
-restituire {"balance": 0.0, "quote_currency": "USD", "error": "..."} con status 200
-(non 500 — il JS deve gestirlo in modo semplice).
-L'endpoint deve essere snello. Non deve caricare strategie attive, non deve
-calcolare metriche, non deve fare query complesse. Solo: apri connessione exchange →
-leggi balance stablecoin → chiudi → rispondi.
-Per ricavare la quote_currency, usa la stessa logica già presente in strategy_service:
-self._get_quote_currency(strategy_impl, exchange_name). Puoi anche usare direttamente
-le rules della strategy: ogni strategy ha get_exchange_rules(exchange_id) che
-restituisce un dict con la chiave "quote" (es. "USDC" o "USDT").
-B. Modificare il JS in app/static/strategy.js
+Il comportamento attuale per Bitmex (che gestisce contractSize e multiplier)
+deve restare. Ma DOPO il check Bitmex, invece di ritornare base_amount
+invariato, arrotonda alla precision del perp:
 
-Aggiungere una funzione fetchLiveBalance() che:
+def _align_base_to_perp_precision(
+    exchange, perp_symbol: str, base_amount: float, perp_price: float
+) -> float:
+    # logica Bitmex esistente (non toccare)
+    if exchange_id(exchange) == "bitmex":
+        ... (codice esistente invariato) ...
 
-Legge exchange_account_id dal dropdown account attualmente selezionato
-Legge strategy_key dalla card strategy selezionata
-Se uno dei due manca, non fa nulla
-Chiama fetch("/strategy/live-balance?exchange_account_id=X&strategy_key=Y")
-Aggiorna gli elementi [data-usdc-balance] con il balance ricevuto
-Aggiorna gli elementi [data-usdc-max] con il balance come max
-Aggiorna latestBalance con il nuovo valore
+    # Per tutti gli altri exchange: arrotonda alla precision del perp
+    precise = exchange.amount_to_precision(perp_symbol, base_amount)
+    try:
+        return float(precise)
+    except (TypeError, ValueError):
+        return base_amount
 
+In questo modo base_amount viene prima arrotondato alla precision del perp,
+e poi spot_amount_to_precision lo arrotonderà ulteriormente alla precision
+dello spot — ma siccome il perp ha tipicamente la precision più grossolana,
+lo spot riceverà un numero già compatibile.
 
-Nel wizard, quando l'utente arriva allo step 3 (cioè dentro setStep
-quando currentStep diventa l'ultimo step):
-
-Mostrare temporaneamente "Loading..." nel campo balance
-Chiamare fetchLiveBalance()
-Quando la risposta arriva, aggiornare il campo con il valore reale
-
-
-Il balance mostrato da /strategy/data (cache) resta per il caricamento
-iniziale della pagina. Il fetch live SOVRASCRIVE quel valore solo quando
-l'utente arriva allo step 3.
-
-C. NON modificare il caricamento iniziale della pagina
-/strategy/data continua a restituire il balance dal cache per il render iniziale.
-Il fetch live è un'aggiunta, non una sostituzione. La pagina si apre veloce
-(cache), e il dato viene rinfrescato quando serve (step 3).
-VINCOLI
-
-L'endpoint deve essere leggero: solo balance stablecoin, niente query extra
-Timeout ragionevole: se l'exchange non risponde in 6 secondi, restituire
-il balance dal cache come fallback
-Non aggiungere dipendenze
-Non modificare il cronjob o il balance cache
-Non rompere il flusso esistente del wizard
-
-TEST DI VERIFICA
-
-Aprire /strategy — la pagina si carica velocemente con il balance dal cache
-Navigare nel wizard fino allo step 3 — il campo "Available" mostra brevemente
-"Loading..." e poi si aggiorna con il balance live
-Fermare una strategia, tornare su /strategy, andare allo step 3 — il balance
-riflette immediatamente le stablecoin liberate, senza aspettare il cronjob
-Se l'exchange non risponde, il campo mostra comunque un valore (dal cache)
-e non resta bloccato su "Loading..."
-Cambiare account nel dropdown e tornare allo step 3 — il balance si aggiorna
-per il nuovo account
-Nessun errore nella console JS
+COSA NON FARE
+- Non toccare la logica Bitmex esistente
+- Non toccare logic.py
+- Non aggiungere logica specifica per Hyperliquid
+Questo fix è universale — migliorerà l'allineamento anche su Deribit, non solo su Hyperliquid.

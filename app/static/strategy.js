@@ -176,6 +176,31 @@
         if (pairEl) pairEl.textContent = pairValue ? upper(pairValue) : "--"
         if (apyEl) apyEl.textContent = apy || "--"
     }
+    const syncExchangeOptions = (data) => {
+        if (!exchangeSelect) return
+        const exchanges = Array.isArray(data.exchanges) ? data.exchanges.filter(Boolean) : []
+        const previousValue = exchangeSelect.value
+        exchangeSelect.innerHTML = ""
+        if (!exchanges.length) {
+            exchangeSelect.disabled = true
+            const option = document.createElement("option")
+            option.value = ""
+            option.textContent = "--"
+            exchangeSelect.appendChild(option)
+            exchangeSelect.value = ""
+            return
+        }
+        exchangeSelect.disabled = false
+        for (const exchangeName of exchanges) {
+            const option = document.createElement("option")
+            option.value = exchangeName
+            option.textContent = upper(exchangeName)
+            exchangeSelect.appendChild(option)
+        }
+        const selectedValue = data.exchange_name || previousValue
+        const hasSelectedValue = Array.from(exchangeSelect.options).some((option) => option.value === selectedValue)
+        exchangeSelect.value = hasSelectedValue ? selectedValue : exchangeSelect.options[0].value
+    }
     const syncAccountOptions = (data) => {
         if (!accountSelect) return
         const accounts = Array.isArray(data.exchange_accounts) ? data.exchange_accounts : []
@@ -275,6 +300,7 @@
             el.setAttribute("max", balance.toString())
         })
         document.querySelectorAll(".loading-text").forEach((el) => el.classList.remove("loading-text"))
+        syncExchangeOptions(data)
         syncAccountOptions(data)
 
         const assetSelect = document.querySelector("[data-asset-select]")
@@ -373,6 +399,7 @@
             if (currentStep === steps.length - 1) fetchLiveBalance()
         }
         const validateStep = (index) => {
+            if (index === 0 && !getSelectedStrategyKey()) return false
             const step = steps[index]
             if (!step) return true
             const inputs = Array.from(step.querySelectorAll("input, select")).filter((el) => !el.disabled)
@@ -410,8 +437,8 @@
     })
     if (strategyCards.length) {
         const selectedKey = getSelectedStrategyKey()
-        const activeCard = strategyCards.find((card) => card.dataset.strategyKey === selectedKey) || strategyCards.find((card) => card.classList.contains("strategy-select-card-active")) || strategyCards[0]
-        activateCard(activeCard)
+        const activeCard = strategyCards.find((card) => card.dataset.strategyKey === selectedKey) || strategyCards.find((card) => card.classList.contains("strategy-select-card-active"))
+        if (activeCard) activateCard(activeCard)
     }
     const assetSelect = document.querySelector("[data-asset-select]")
     if (assetSelect) assetSelect.addEventListener("change", updateSummary)

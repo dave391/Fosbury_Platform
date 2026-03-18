@@ -33,14 +33,15 @@
                            class="mt-1 block w-full input">
                 </div>
                 <div>
-                    <label class="block text-xs uppercase tracking-wider">API Key</label>
-                    <input type="text" name="api_key" required placeholder="API Key"
+                    <label id="api-key-label" class="block text-xs uppercase tracking-wider">API Key</label>
+                    <input id="api-key-input" type="text" name="api_key" required placeholder="API Key"
                            class="mt-1 block w-full input">
                 </div>
                 <div>
-                    <label class="block text-xs uppercase tracking-wider">Secret</label>
+                    <label id="api-secret-label" class="block text-xs uppercase tracking-wider">API Secret</label>
                     <div class="relative">
                         <input
+                            id="api-secret-input"
                             type="password"
                             name="api_secret"
                             required
@@ -67,6 +68,9 @@
                         </button>
                     </div>
                 </div>
+                <p id="hyperliquid-note" class="hidden text-xs text-white/70">
+                    Genera un API wallet dalla UI di Hyperliquid (Settings → API). Non inserire la private key del tuo wallet principale.
+                </p>
             </div>
         </div>
 
@@ -97,5 +101,29 @@
         </table>
     </div>
 </div>
+<script>
+    (() => {
+        const exchangeSelect = document.getElementById("exchange-select")
+        const apiKeyLabel = document.getElementById("api-key-label")
+        const apiKeyInput = document.getElementById("api-key-input")
+        const apiSecretLabel = document.getElementById("api-secret-label")
+        const apiSecretInput = document.getElementById("api-secret-input")
+        const note = document.getElementById("hyperliquid-note")
+        if (!exchangeSelect || !apiKeyLabel || !apiKeyInput || !apiSecretLabel || !apiSecretInput || !note) return
+
+        const applyExchangeLabels = () => {
+            const selected = String(exchangeSelect.value || "").toLowerCase()
+            const isHyperliquid = selected === "hyperliquid"
+            apiKeyLabel.textContent = isHyperliquid ? "Wallet Address" : "API Key"
+            apiKeyInput.placeholder = isHyperliquid ? "Wallet Address" : "API Key"
+            apiSecretLabel.textContent = isHyperliquid ? "API Wallet Private Key" : "API Secret"
+            apiSecretInput.placeholder = isHyperliquid ? "API Wallet Private Key" : "API Secret"
+            note.classList.toggle("hidden", !isHyperliquid)
+        }
+
+        exchangeSelect.addEventListener("change", applyExchangeLabels)
+        applyExchangeLabels()
+    })()
+</script>
 <script src="/static/config.js"></script>
 {% endblock %}
