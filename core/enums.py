@@ -13,6 +13,7 @@ class AssetType(str, Enum):
 class ExchangeName(str, Enum):
     DERIBIT = "deribit"
     BITMEX = "bitmex"
+    HYPERLIQUID = "hyperliquid"
 
 class CookieName(str, Enum):
     SESSION = "session"

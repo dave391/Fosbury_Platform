@@ -174,31 +174,35 @@ def _align_base_amount(
 def _align_base_to_perp_precision(
     exchange, perp_symbol: str, base_amount: float, perp_price: float
 ) -> float:
-    if exchange_id(exchange) != "bitmex":
-        return base_amount
-    market = exchange.markets.get(perp_symbol) or {}
-    inverse = market.get("inverse") is True
-    if inverse:
-        if perp_price <= 0:
-            return base_amount
-        amount_contracts = base_amount * perp_price
-    else:
-        multiplier = market.get("info", {}).get("underlyingToPositionMultiplier") or 1
+    if exchange_id(exchange) == "bitmex":
+        market = exchange.markets.get(perp_symbol) or {}
+        inverse = market.get("inverse") is True
+        if inverse:
+            if perp_price <= 0:
+                return base_amount
+            amount_contracts = base_amount * perp_price
+        else:
+            multiplier = market.get("info", {}).get("underlyingToPositionMultiplier") or 1
+            try:
+                multiplier_value = float(multiplier)
+            except (TypeError, ValueError):
+                multiplier_value = 1.0
+            if multiplier_value <= 0:
+                return base_amount
+            amount_contracts = base_amount * multiplier_value
+        precise = exchange.amount_to_precision(perp_symbol, amount_contracts)
         try:
-            multiplier_value = float(multiplier)
+            precise_value = float(precise)
         except (TypeError, ValueError):
-            multiplier_value = 1.0
-        if multiplier_value <= 0:
             return base_amount
-        amount_contracts = base_amount * multiplier_value
-    precise = exchange.amount_to_precision(perp_symbol, amount_contracts)
+        if inverse:
+            return precise_value / perp_price
+        return precise_value / multiplier_value
+    precise = exchange.amount_to_precision(perp_symbol, base_amount)
     try:
-        precise_value = float(precise)
+        return float(precise)
     except (TypeError, ValueError):
         return base_amount
-    if inverse:
-        return precise_value / perp_price
-    return precise_value / multiplier_value
 
 
 def spot_amount_to_precision(exchange, symbol: str, amount: float) -> float:

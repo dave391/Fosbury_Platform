@@ -6,7 +6,7 @@ from core.enums import StrategyStatus, ExchangeName
 from core.constants import MIN_ADD_CAPITAL_USDC, MIN_REMOVE_CAPITAL_USDC
 from typing import List, Optional, Dict, Any
 from app.services.exchange_service import ExchangeService
-from app.services.strategies.registry import get_strategy_registry, DEFAULT_STRATEGY_KEY
+from app.services.strategies.registry import get_strategy_registry
 from datetime import date, datetime, timezone, time
 from uuid import uuid4
 from importlib import import_module
@@ -16,7 +16,7 @@ class StrategyService:
         self.db = db
         self.exchange_service = ExchangeService(db)
         self.strategy_registry = get_strategy_registry()
-        self.default_strategy_key = DEFAULT_STRATEGY_KEY
+        self.default_strategy_key = next(iter(self.strategy_registry), "")
 
     def get_available_strategies(self) -> List[Dict[str, str]]:
         return [
@@ -193,27 +193,42 @@ class StrategyService:
         if connected_exchanges is None:
             connected_exchanges = await self.get_connected_exchange_names(user_id)
         connected_exchanges = [str(name or "").strip().lower() for name in (connected_exchanges or []) if name]
-        if connected_exchanges and exchange_name not in connected_exchanges:
-            exchange_name = connected_exchanges[0]
         strategies = await self.get_active_strategies(user_id)
-        
-        usdc_balance = 0.0
-        strategy_impl = self._get_strategy_impl(strategy_key)
-        selected_strategy_key = str(getattr(strategy_impl, "key", "") or self.default_strategy_key)
-        allowed_assets = strategy_impl.get_allowed_assets(exchange_name)
+        has_credentials = bool(connected_exchanges)
+        selected_strategy_key = str(strategy_key or "").strip()
+        if not selected_strategy_key:
+            return {
+                "user_id": user_id,
+                "strategies": strategies,
+                "usdc_balance": 0.0,
+                "has_credentials": has_credentials,
+                "allowed_assets": [],
+                "min_capital_usd": None,
+                "exchange_name": "",
+                "quote_currency": "USDC",
+                "strategy_key": "",
+                "available_strategies": self.get_available_strategies(),
+                "exchange_accounts": [],
+                "exchange_account_id": None,
+                "exchanges": [],
+            }
+        strategy_impl = self._get_strategy_impl(selected_strategy_key)
+        selected_strategy_key = str(getattr(strategy_impl, "key", "") or selected_strategy_key)
+        available_exchanges = self._get_supported_exchanges(strategy_impl, connected_exchanges)
+        if exchange_name not in available_exchanges:
+            exchange_name = available_exchanges[0] if available_exchanges else ""
+        allowed_assets = strategy_impl.get_allowed_assets(exchange_name) if exchange_name else []
         min_capital_usd = strategy_impl.get_min_capital()
         quote_currency = self._get_quote_currency(strategy_impl, exchange_name)
-        exchange_accounts = await self.exchange_service.get_user_exchange_accounts(user_id, exchange_name)
-        has_credentials = bool(exchange_accounts)
+        exchange_accounts = (
+            await self.exchange_service.get_user_exchange_accounts(user_id, exchange_name) if exchange_name else []
+        )
         selected_account = None
         if exchange_account_id is not None:
-            selected_account = next(
-                (account for account in exchange_accounts if account["id"] == exchange_account_id),
-                None,
-            )
+            selected_account = next((account for account in exchange_accounts if account["id"] == exchange_account_id), None)
         if selected_account is None and exchange_accounts:
             selected_account = exchange_accounts[0]
-
+        usdc_balance = 0.0
         if selected_account:
             selected_exchange_name = str(selected_account.get("exchange_name") or exchange_name).strip().lower()
             quote_currency = self._get_quote_currency(strategy_impl, selected_exchange_name)
@@ -227,7 +242,6 @@ class StrategyService:
             account = account_result.scalars().first()
             if account:
                 usdc_balance = float(account.cached_balance_usdc or 0.0)
-                
         return {
             "user_id": user_id,
             "strategies": strategies,
@@ -241,6 +255,7 @@ class StrategyService:
             "available_strategies": self.get_available_strategies(),
             "exchange_accounts": exchange_accounts,
             "exchange_account_id": selected_account["id"] if selected_account else None,
+            "exchanges": available_exchanges,
         }
 
     async def _get_exchange_or_raise(self, exchange_account_id: int):
@@ -250,11 +265,24 @@ class StrategyService:
         return exchange
 
     def _get_strategy_impl(self, strategy_key: Optional[str] = None):
-        key = str(strategy_key or self.default_strategy_key).strip() or self.default_strategy_key
+        key = str(strategy_key or "").strip() or self.default_strategy_key
+        if not key:
+            raise ValueError("Strategy selection is required.")
         strategy_impl = self.strategy_registry.get(key)
         if not strategy_impl:
             raise ValueError(f"Strategy '{key}' not available.")
         return strategy_impl
+
+    def _get_supported_exchanges(self, strategy_impl, connected_exchanges: List[str]) -> List[str]:
+        available = []
+        for exchange_name in connected_exchanges:
+            try:
+                assets = strategy_impl.get_allowed_assets(exchange_name)
+            except Exception:
+                continue
+            if assets and exchange_name not in available:
+                available.append(exchange_name)
+        return available
 
     def _get_quote_currency(self, strategy_impl, exchange_name: Optional[str]) -> str:
         strategy_key = str(getattr(strategy_impl, "key", "") or "").strip()

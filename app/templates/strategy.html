@@ -79,6 +79,7 @@
                             <div>
                                 <label class="block text-xs uppercase tracking-wider">Exchange</label>
                                 <select name="exchange_name" id="strategy-exchange-select" class="mt-1 block w-full input" required>
+                                    <option value="" {% if not exchange_name %}selected{% endif %} disabled>--</option>
                                     {% for ex in exchanges %}
                                     <option value="{{ ex }}" {% if exchange_name == ex %}selected{% endif %}>{{ ex|upper }}</option>
                                     {% endfor %}
@@ -87,6 +88,7 @@
                             <div>
                                 <label class="block text-xs uppercase tracking-wider">Account</label>
                                 <select name="exchange_account_id" id="strategy-account-select" class="mt-1 block w-full input" required>
+                                    <option value="" {% if not exchange_account_id %}selected{% endif %} disabled>--</option>
                                     {% for account in exchange_accounts %}
                                     <option value="{{ account.id }}" {% if exchange_account_id == account.id %}selected{% endif %}>{{ account.label }}</option>
                                     {% endfor %}

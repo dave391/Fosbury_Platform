@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.engine.url import make_url
 
 from app.services.exchange_service import ExchangeService
-from app.services.strategies.registry import DEFAULT_STRATEGY_KEY, get_strategy_registry
+from app.services.strategies.registry import get_strategy_registry
 from core.config import settings
 from core.database import AsyncSessionLocal
 from core.enums import StrategyStatus
@@ -35,6 +35,7 @@ async def run_balance_cache():
     async with AsyncSessionLocal() as db:
         exchange_service = ExchangeService(db)
         strategy_registry = get_strategy_registry()
+        default_strategy_key = next(iter(strategy_registry), "")
         result = await db.execute(
             select(ExchangeAccount).where(ExchangeAccount.disabled_at.is_(None))
         )
@@ -62,7 +63,7 @@ async def run_balance_cache():
         for strategy in active_strategies:
             if strategy.exchange_account_id not in strategy_key_by_account:
                 strategy_key_by_account[strategy.exchange_account_id] = str(
-                    strategy.strategy_key or DEFAULT_STRATEGY_KEY
+                    strategy.strategy_key or default_strategy_key
                 )
 
         if debug:
@@ -82,8 +83,8 @@ async def run_balance_cache():
                     )
                 continue
             try:
-                strategy_key = strategy_key_by_account.get(account.id) or DEFAULT_STRATEGY_KEY
-                strategy_impl = strategy_registry.get(strategy_key) or strategy_registry.get(DEFAULT_STRATEGY_KEY)
+                strategy_key = strategy_key_by_account.get(account.id) or default_strategy_key
+                strategy_impl = strategy_registry.get(strategy_key) or strategy_registry.get(default_strategy_key)
                 if not strategy_impl:
                     raise ValueError("strategy_not_configured")
                 adapter = exchange_service.get_exchange_adapter(account.exchange_name)
