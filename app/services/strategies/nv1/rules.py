@@ -1,7 +1,7 @@
 STRATEGY_KEY = "nv1"
 STRATEGY_NAME = "Neutro V1"
 FEE_BUFFER = 1.002
-MIN_CAPITAL_USD = 25
+MIN_CAPITAL_USD = 20
 DEFAULT_LEVERAGE = 5.0
 MARGIN_SAFETY_BUFFER = 1.2
 MIN_ALLOCATION_PCT = 0.95
@@ -34,9 +34,21 @@ EXCHANGE_RULES = {
     },
     "hyperliquid": {
         "enabled": True,
-        "assets": ["BTC", "ETH", "SOL", "HYPE"],
+        "assets": ["BTC", "ETH", "SOL", "HYPE", "FARTCOIN", "PURR"],
         "quote": "USDC",
-        "spot_asset_aliases": {},
+        "default_leverage": 5.0,
+        "asset_leverage_overrides": {"PURR": 3.0},
+        "spot_asset_aliases": {"FARTCOIN": "FART"},
+        "spot_symbol_overrides": {
+            "PUMP": "PUMP/USDC",
+            "FARTCOIN": "FART/USDC",
+            "PURR": "PURR/USDC",
+        },
+        "perp_symbol_overrides": {
+            "PUMP": "PUMP/USDC:USDC",
+            "FARTCOIN": "FARTCOIN/USDC:USDC",
+            "PURR": "PURR/USDC:USDC",
+        },
         "perp_size_mode": "base",
         "partial_allocation_allowed": True,
     },

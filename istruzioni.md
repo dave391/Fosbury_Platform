@@ -1,43 +1,34 @@
-Su Hyperliquid c'è un mismatch tra la size spot e perp perché
-_align_base_to_perp_precision in common.py scatta solo per Bitmex.
-Per gli altri exchange ritorna base_amount invariato, e poi
-spot_amount_to_precision e perp_amount_to_precision arrotondano
-indipendentemente con precision diverse.
+Hyperliquid non include markPrice nella risposta di fetch_positions.
+L'adapter ritorna mark_price: 0.0, e l'orchestrator non riesce a
+calcolare liquidation_distance_pct e excess_margin.
 
 OBIETTIVO
-Fare in modo che _align_base_to_perp_precision applichi l'arrotondamento
-alla precision del perp per TUTTI gli exchange, non solo Bitmex.
-Questo garantisce che spot e perp partano dalla stessa base amount.
+Nell'adapter Hyperliquid, se markPrice è null dopo fetch_positions,
+recupera il prezzo da fetch_ticker.
 
 COSA FARE
 
-In app/services/strategies/common.py, modifica _align_base_to_perp_precision.
+In app/services/exchanges/hyperliquid.py, modifica fetch_position_info.
 
-Il comportamento attuale per Bitmex (che gestisce contractSize e multiplier)
-deve restare. Ma DOPO il check Bitmex, invece di ritornare base_amount
-invariato, arrotonda alla precision del perp:
+Dopo aver estratto mark_price dalla posizione, se è None o 0,
+fetcha il ticker per quel symbol e usa il prezzo:
 
-def _align_base_to_perp_precision(
-    exchange, perp_symbol: str, base_amount: float, perp_price: float
-) -> float:
-    # logica Bitmex esistente (non toccare)
-    if exchange_id(exchange) == "bitmex":
-        ... (codice esistente invariato) ...
+    mark_price = to_float(position.get("markPrice"))
+    if not mark_price:
+        try:
+            ticker = await exchange.fetch_ticker(symbol)
+            mark_price = to_float(
+                ticker.get("last")
+                or ticker.get("close")
+                or ticker.get("mark")
+            )
+        except Exception:
+            mark_price = None
 
-    # Per tutti gli altri exchange: arrotonda alla precision del perp
-    precise = exchange.amount_to_precision(perp_symbol, base_amount)
-    try:
-        return float(precise)
-    except (TypeError, ValueError):
-        return base_amount
-
-In questo modo base_amount viene prima arrotondato alla precision del perp,
-e poi spot_amount_to_precision lo arrotonderà ulteriormente alla precision
-dello spot — ma siccome il perp ha tipicamente la precision più grossolana,
-lo spot riceverà un numero già compatibile.
+Il resto del metodo resta invariato.
 
 COSA NON FARE
-- Non toccare la logica Bitmex esistente
-- Non toccare logic.py
-- Non aggiungere logica specifica per Hyperliquid
-Questo fix è universale — migliorerà l'allineamento anche su Deribit, non solo su Hyperliquid.
+- Non toccare logic.py, orchestrator, o position_manager
+- Non aggiungere retry o logica complessa
+- Se anche fetch_ticker fallisce, mark_price resta 0.0 — il position_manager
+  gestisce già il caso con il warning
