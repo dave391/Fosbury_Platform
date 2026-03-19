@@ -109,7 +109,7 @@
                                     </div>
                                 </div>
                                 <div class="mt-4 flex flex-wrap items-center gap-2">
-                                    <button type="button" class="btn-inline btn-secondary btn-inline-manage" data-manage-open data-strategy-id="{{ s.id }}" data-strategy-key="{{ s.strategy_key }}" data-exchange-account-id="{{ s.exchange_account_id }}" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}" data-reduce-max="{{ s.reduce_max_usdc }}">Manage</button>
+                                    <button type="button" class="btn-inline btn-secondary btn-inline-manage" data-manage-open data-strategy-id="{{ s.id }}" data-strategy-key="{{ s.strategy_key }}" data-exchange-account-id="{{ s.exchange_account_id }}" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}" data-reduce-max="{{ s.reduce_max_usdc }}" data-add-min="{{ s.min_add_capital_usdc or 10 }}">Manage</button>
                                     <form action="/strategy/stop" method="post" class="flex" data-confirm-form data-confirm-action="stop" data-strategy-name="{{ s.name }}" data-asset="{{ s.asset }}" data-exchange-name="{{ s.exchange_name }}" data-quote-currency="{{ s.quote_currency or 'USDC' }}">
                                         <input type="hidden" name="strategy_id" value="{{ s.id }}">
                                         <button type="submit" class="btn-inline btn-secondary">Stop Strategy</button>
@@ -210,7 +210,7 @@
             <div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" data-manage-modal>
                 <div class="card-surface w-full max-w-md p-4">
                     <div class="text-sm font-semibold uppercase tracking-wider">Manage strategy</div>
-                    <form action="/strategy/add" method="post" class="mt-4 space-y-3" data-submit-feedback data-amount-form data-action="add" data-add-action="/strategy/add" data-remove-action="/strategy/remove" data-add-name="added_amount_usdc" data-remove-name="remove_amount_usdc" data-confirm-form>
+                    <form action="/strategy/add" method="post" class="mt-4 space-y-3" data-submit-feedback data-amount-form data-action="add" data-add-action="/strategy/add" data-remove-action="/strategy/remove" data-add-name="added_amount_usdc" data-remove-name="remove_amount_usdc" data-add-min="10" data-remove-min="10" data-confirm-form>
                         <input type="hidden" name="strategy_id" value="" data-strategy-id-input>
                         <div class="toggle-group">
                             <button type="button" class="toggle-button toggle-active" data-action-toggle="add">Add</button>
@@ -221,7 +221,7 @@
                                 <span>Available: <span data-available-value>0.00</span> <span data-available-quote></span></span>
                             </div>
                             <div class="mt-2 flex items-center gap-2">
-                                <input type="number" name="added_amount_usdc" min="10" max="0" step="1" required data-max-input data-amount-input
+                                <input type="number" name="added_amount_usdc" min="1" max="0" step="1" required data-max-input data-amount-input
                                        class="block w-full max-w-[240px] input">
                                 <button type="button" class="btn-inline btn-secondary" data-max-button>Max</button>
                             </div>

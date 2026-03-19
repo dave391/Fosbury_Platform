@@ -11,3 +11,4 @@ env/
 .DS_Store
 node_modules/
 istruzioni.md
+env.test

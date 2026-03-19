@@ -104,6 +104,7 @@ class StrategyService:
             strategy_key = str(strategy.strategy_key or self.default_strategy_key)
             strategy_impl = self._get_strategy_impl(strategy_key)
             quote_currency = self._get_quote_currency(strategy_impl, account.exchange_name if account else None)
+            min_add_capital = self._get_min_add_capital(strategy_impl)
             min_remaining_capital = self._get_min_remaining_capital(strategy_impl)
             rows.append(
                 {
@@ -121,6 +122,7 @@ class StrategyService:
                     "exchange_name": account.exchange_name if account else None,
                     "strategy_key": strategy_key,
                     "quote_currency": quote_currency,
+                    "min_add_capital_usdc": min_add_capital,
                     "min_remaining_capital_usdc": min_remaining_capital,
                 }
             )
@@ -279,6 +281,16 @@ class StrategyService:
                 available.append(exchange_name)
         return available
 
+    def _normalize_strategy_key(self, strategy_key: Optional[str]) -> str:
+        return str(strategy_key or "").strip() or self.default_strategy_key
+
+    def _are_strategies_compatible(self, first_key: Optional[str], second_key: Optional[str]) -> bool:
+        first = self._normalize_strategy_key(first_key)
+        second = self._normalize_strategy_key(second_key)
+        if first == second:
+            return True
+        return first == "hlp" or second == "hlp"
+
     def _get_quote_currency(self, strategy_impl, exchange_name: Optional[str]) -> str:
         strategy_key = str(getattr(strategy_impl, "key", "") or "").strip()
         module_name = str(getattr(strategy_impl.__class__, "__module__", "") or "").strip()
@@ -303,7 +315,7 @@ class StrategyService:
                 continue
         return "USDC"
 
-    def _get_min_remaining_capital(self, strategy_impl) -> float:
+    def _get_strategy_rule_number(self, strategy_impl, rule_name: str, default_value: float) -> float:
         strategy_key = str(getattr(strategy_impl, "key", "") or "").strip()
         module_name = str(getattr(strategy_impl.__class__, "__module__", "") or "").strip()
         module_candidates = []
@@ -316,12 +328,18 @@ class StrategyService:
         for rules_module_name in module_candidates:
             try:
                 rules_module = import_module(rules_module_name)
-                value = getattr(rules_module, "MIN_REMAINING_CAPITAL_USDC", None)
+                value = getattr(rules_module, rule_name, None)
                 if value is not None:
                     return max(0.0, float(value))
             except Exception:
                 continue
-        return 1.0
+        return max(0.0, float(default_value))
+
+    def _get_min_add_capital(self, strategy_impl) -> float:
+        return self._get_strategy_rule_number(strategy_impl, "MIN_ADD_CAPITAL_USDC", MIN_ADD_CAPITAL_USDC)
+
+    def _get_min_remaining_capital(self, strategy_impl) -> float:
+        return self._get_strategy_rule_number(strategy_impl, "MIN_REMAINING_CAPITAL_USDC", 1.0)
 
     async def start_strategy(
         self,
@@ -357,19 +375,17 @@ class StrategyService:
         )
         active_on_account = active_on_account_result.scalars().all()
         if any(
-            str(strategy.strategy_key or self.default_strategy_key) != selected_strategy_key
+            not self._are_strategies_compatible(selected_strategy_key, strategy.strategy_key)
             for strategy in active_on_account
         ):
             raise ValueError("Another strategy is already active on this account.")
 
-        duplicate_result = await self.db.execute(
-            select(Strategy).where(
-                Strategy.exchange_account_id == account.id,
-                Strategy.asset == asset,
-                Strategy.status == StrategyStatus.ACTIVE,
-            )
-        )
-        if duplicate_result.scalars().first():
+        selected_asset = str(asset or "").strip().upper()
+        if any(
+            self._normalize_strategy_key(strategy.strategy_key) == selected_strategy_key
+            and str(strategy.asset or "").strip().upper() == selected_asset
+            for strategy in active_on_account
+        ):
             raise ValueError("Strategy already active for this asset.")
 
         exchange = await self._get_exchange_or_raise(account.id)
@@ -393,18 +409,18 @@ class StrategyService:
             await exchange.close()
 
     async def add_capital(self, user_id: int, strategy_id: int, added_amount_usdc: float) -> Strategy:
-        if added_amount_usdc < MIN_ADD_CAPITAL_USDC:
-            raise ValueError(f"Minimum amount is {MIN_ADD_CAPITAL_USDC} USDC.")
-
         strategy = await self.get_strategy_by_id(user_id, strategy_id)
         if not strategy:
             raise ValueError("Strategy not found.")
+        strategy_impl = self._get_strategy_impl(strategy.strategy_key)
+        min_add_capital_usdc = self._get_min_add_capital(strategy_impl)
+        if added_amount_usdc < min_add_capital_usdc:
+            raise ValueError(f"Minimum amount is {min_add_capital_usdc} USDC.")
 
         exchange = await self._get_exchange_or_raise(strategy.exchange_account_id)
 
         try:
             adapter = self.exchange_service.get_exchange_adapter(exchange.id)
-            strategy_impl = self._get_strategy_impl(strategy.strategy_key)
             usdc_balance = await strategy_impl.fetch_usdc_balance(exchange, adapter)
             quote_currency = self._get_quote_currency(strategy_impl, exchange.id)
             if added_amount_usdc > usdc_balance:
