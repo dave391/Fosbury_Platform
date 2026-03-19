@@ -157,6 +157,12 @@
     let latestBalance = 0
     let refreshLiveBalance = () => {}
     let liveBalanceRequestId = 0
+    const hlpRiskNote = document.querySelector("[data-hlp-risk-note]")
+    const applyHlpRiskNote = () => {
+        if (!hlpRiskNote) return
+        const isHlp = String(getSelectedStrategyKey() || "").toLowerCase() === "hlp"
+        hlpRiskNote.classList.toggle("hidden", !isHlp)
+    }
     const updateSummary = () => {
         const strategyEl = document.querySelector("[data-summary-strategy]")
         const exchangeEl = document.querySelector("[data-summary-exchange]")
@@ -316,6 +322,7 @@
                 assetSelect.innerHTML = `<option value="" selected disabled>--</option>`
             }
         }
+        applyHlpRiskNote()
         updateSummary()
         updateAllocation()
         refreshLiveBalance()
@@ -427,6 +434,7 @@
         const form = document.getElementById("strategy-form")
         if (strategyKeyInput && card.dataset.strategyKey) strategyKeyInput.value = card.dataset.strategyKey
         if (form) form.dataset.strategyName = card.dataset.strategyName || "Strategy"
+        applyHlpRiskNote()
         updateSummary()
     }
     strategyCards.forEach((card) => {
@@ -440,6 +448,7 @@
         const activeCard = strategyCards.find((card) => card.dataset.strategyKey === selectedKey) || strategyCards.find((card) => card.classList.contains("strategy-select-card-active"))
         if (activeCard) activateCard(activeCard)
     }
+    applyHlpRiskNote()
     const assetSelect = document.querySelector("[data-asset-select]")
     if (assetSelect) assetSelect.addEventListener("change", updateSummary)
     if (exchangeSelect) exchangeSelect.addEventListener("change", updateSummary)

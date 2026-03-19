@@ -2,6 +2,8 @@ STRATEGY_KEY = "cash_funding"
 STRATEGY_NAME = "Cash & Funding"
 FEE_BUFFER = 1.002
 MIN_CAPITAL_USD = 25
+MIN_ADD_CAPITAL_USDC = 10.0
+MIN_REMAINING_CAPITAL_USDC = 1.0
 
 EXCHANGE_RULES = {
     "deribit": {
@@ -26,4 +28,3 @@ def get_exchange_rules(exchange_id: str) -> dict:
     if not rules or not rules.get("enabled"):
         raise ValueError("Exchange non disponibile per questa strategia.")
     return rules
-#

@@ -388,12 +388,14 @@
         const actionTarget = action === "add" ? form.dataset.addAction : form.dataset.removeAction
         const nameTarget = action === "add" ? form.dataset.addName : form.dataset.removeName
         const maxTarget = action === "add" ? form.dataset.addMax : form.dataset.removeMax
+        const minTarget = action === "add" ? form.dataset.addMin : form.dataset.removeMin
         const availableTarget = action === "add" ? form.dataset.addAvailable : form.dataset.removeAvailable
         const input = form.querySelector("[data-amount-input]")
         const available = form.querySelector("[data-available-value]")
         if (actionTarget) form.setAttribute("action", actionTarget)
         if (input) {
             input.setAttribute("name", nameTarget || "")
+            if (minTarget) input.setAttribute("min", minTarget)
             if (maxTarget) input.setAttribute("max", maxTarget)
         }
         if (available && availableTarget) available.textContent = availableTarget
@@ -554,6 +556,8 @@
         const exchangeName = button.dataset.exchangeName || ""
         const quote = button.dataset.quoteCurrency || "USDC"
         const reduceMax = Number(button.dataset.reduceMax || 0)
+        const addMin = Number(button.dataset.addMin || manageForm.dataset.addMin || 10)
+        manageForm.dataset.addMin = addMin.toString()
         manageForm.dataset.addMax = "0"
         manageForm.dataset.removeMax = reduceMax.toString()
         manageForm.dataset.addAvailable = "0.00"
