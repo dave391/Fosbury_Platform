@@ -20,7 +20,16 @@ class HyperliquidExchange(ExchangeAdapter):
         original_create_order = client.create_order
 
         async def patched_create_order(symbol, type, side, amount, price=None, params=None):
+            safe_params = dict(params or {})
             normalized_type = str(type or "").lower()
+            if price is None:
+                hinted_price = safe_params.pop("_price_hint", None)
+                try:
+                    hinted_value = float(hinted_price) if hinted_price is not None else None
+                except (TypeError, ValueError):
+                    hinted_value = None
+                if hinted_value is not None and hinted_value > 0:
+                    price = hinted_value
             if normalized_type == "market" and price is None:
                 ticker = await client.fetch_ticker(symbol)
                 for key in ("last", "close", "bid", "ask", "mark"):
@@ -34,7 +43,7 @@ class HyperliquidExchange(ExchangeAdapter):
                         continue
                 if price is None:
                     raise ValueError(f"Cannot fetch price for {symbol}")
-            return await original_create_order(symbol, type, side, amount, price, params or {})
+            return await original_create_order(symbol, type, side, amount, price, safe_params)
 
         client.create_order = patched_create_order
         return client
@@ -121,6 +130,16 @@ class HyperliquidExchange(ExchangeAdapter):
         margin = to_float(position.get("collateral"))
         initial_margin = to_float(position.get("initialMargin"))
         mark_price = to_float(position.get("markPrice"))
+        if not mark_price:
+            try:
+                ticker = await exchange.fetch_ticker(symbol)
+                mark_price = to_float(
+                    ticker.get("last")
+                    or ticker.get("close")
+                    or ticker.get("mark")
+                )
+            except Exception:
+                mark_price = None
         unrealized_pnl = to_float(position.get("unrealizedPnl"))
         leverage = to_float(position.get("leverage"))
 

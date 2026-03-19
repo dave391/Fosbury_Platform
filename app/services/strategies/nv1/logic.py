@@ -38,9 +38,31 @@ def _validate_asset(rules: dict, asset: str) -> None:
         raise ValueError("Asset non disponibile per questo exchange.")
 
 
+def _target_leverage(rules: dict, asset: str) -> float:
+    leverage = rules.get("default_leverage", DEFAULT_LEVERAGE)
+    overrides = rules.get("asset_leverage_overrides") or {}
+    if asset in overrides:
+        leverage = overrides.get(asset)
+    try:
+        value = float(leverage)
+    except (TypeError, ValueError):
+        value = float(DEFAULT_LEVERAGE)
+    return value if value > 0 else float(DEFAULT_LEVERAGE)
+
+
 async def ensure_strategy_config(exchange, asset: str, config: dict) -> dict:
     rules = _get_rules(_exchange_id(exchange)) or {}
     return await _ensure_strategy_config_common(exchange, asset, config, rules, _validate_asset)
+
+
+def _market_params(price: Optional[float]) -> dict:
+    try:
+        parsed = float(price)
+    except (TypeError, ValueError):
+        return {}
+    if parsed <= 0:
+        return {}
+    return {"_price_hint": parsed}
 
 
 async def stop(db, exchange, adapter, strategy) -> float:
@@ -73,7 +95,7 @@ async def stop(db, exchange, adapter, strategy) -> float:
         perp_price,
     )
     try:
-        perp_order = await exchange.create_market_buy_order(perp_symbol, perp_qty)
+        perp_order = await exchange.create_market_buy_order(perp_symbol, perp_qty, _market_params(perp_price))
     except Exception:
         logger.exception(
             "nv1_stop_short_close_failed asset=%s spot=%s perp=%s spot_qty=%.8f perp_qty=%.8f",
@@ -90,8 +112,8 @@ async def stop(db, exchange, adapter, strategy) -> float:
         remaining_mark = float((remaining_position or {}).get("mark_price") or perp_price)
         remaining_qty = perp_amount_to_precision(exchange, perp_symbol, config, remaining_size, remaining_mark)
         if remaining_qty > 0:
-            await exchange.create_market_buy_order(perp_symbol, remaining_qty)
-    spot_order = await exchange.create_market_sell_order(spot_symbol, spot_qty)
+            await exchange.create_market_buy_order(perp_symbol, remaining_qty, _market_params(remaining_mark))
+    spot_order = await exchange.create_market_sell_order(spot_symbol, spot_qty, _market_params(None))
     exit_perp_px = float(perp_order.get("average") or perp_price)
     exit_spot_px = float(spot_order.get("average") or await get_last_price(exchange, spot_symbol))
     entry_spot_px = float(strategy.entry_spot_px or exit_spot_px)
@@ -113,12 +135,13 @@ async def stop(db, exchange, adapter, strategy) -> float:
 async def add(db, exchange, adapter, strategy, added_amount_usdc: float):
     asset = strategy.asset
     config = await ensure_strategy_config(exchange, asset, strategy.config or {})
+    rules = _get_rules(_exchange_id(exchange))
+    leverage = _target_leverage(rules, asset)
     strategy.config = config
     spot_symbol = config.get("spot_symbol")
     perp_symbol = config.get("perp_symbol")
     spot_price = await get_last_price(exchange, spot_symbol)
     perp_price = await get_last_price(exchange, perp_symbol)
-    leverage = float(DEFAULT_LEVERAGE)
     safety_buffer = float(MARGIN_SAFETY_BUFFER)
     trade_capital = float(added_amount_usdc) / float(FEE_BUFFER)
     base_amount = trade_capital / (spot_price * (1.0 + (safety_buffer / leverage)))
@@ -129,16 +152,16 @@ async def add(db, exchange, adapter, strategy, added_amount_usdc: float):
     _log_sizes(config.get("exchange"), spot_symbol, spot_amount, perp_symbol, perp_amount)
     if spot_amount <= 0 or perp_amount <= 0:
         raise ValueError("Invalid amount (too small)")
-    spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount)
+    spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount, _market_params(spot_price))
     filled = float(spot_order.get("filled") or spot_order.get("amount") or spot_amount)
     entry_spot_px = float(spot_order.get("average") or spot_price)
     real_spot_capital = float(spot_order.get("cost") or (entry_spot_px * filled))
     try:
         perp_price = await get_last_price(exchange, perp_symbol)
         perp_amount = perp_amount_to_precision(exchange, perp_symbol, config, filled, perp_price)
-        perp_order = await exchange.create_market_sell_order(perp_symbol, perp_amount)
+        perp_order = await exchange.create_market_sell_order(perp_symbol, perp_amount, _market_params(perp_price))
     except Exception:
-        await exchange.create_market_sell_order(spot_symbol, filled)
+        await exchange.create_market_sell_order(spot_symbol, filled, _market_params(entry_spot_px))
         raise
     entry_perp_px = float(perp_order.get("average") or perp_price)
     prev_qty = float(strategy.total_quantity or 0.0)
@@ -153,9 +176,9 @@ async def add(db, exchange, adapter, strategy, added_amount_usdc: float):
             try:
                 perp_filled = float(perp_order.get("filled") or perp_order.get("amount") or perp_amount)
                 if perp_filled > 0:
-                    await exchange.create_market_buy_order(perp_symbol, perp_filled)
+                    await exchange.create_market_buy_order(perp_symbol, perp_filled, _market_params(entry_perp_px))
             finally:
-                await exchange.create_market_sell_order(spot_symbol, filled)
+                await exchange.create_market_sell_order(spot_symbol, filled, _market_params(entry_spot_px))
             raise ValueError(margin_result.get("error") or "add_margin failed")
     final_position_info = await adapter.fetch_position_info(exchange, perp_symbol)
     final_margin = float((final_position_info or {}).get("margin") or 0.0)
@@ -212,8 +235,8 @@ async def remove(db, exchange, adapter, strategy, remove_amount_usdc: float) -> 
     _log_sizes(config.get("exchange"), spot_symbol, spot_qty, perp_symbol, perp_qty)
     if spot_qty <= 0 or perp_qty <= 0:
         return 0.0
-    await exchange.create_market_buy_order(perp_symbol, perp_qty)
-    spot_order = await exchange.create_market_sell_order(spot_symbol, spot_qty)
+    await exchange.create_market_buy_order(perp_symbol, perp_qty, _market_params(perp_price))
+    spot_order = await exchange.create_market_sell_order(spot_symbol, spot_qty, _market_params(spot_price))
     removed_cost = spot_order.get("cost")
     removed_capital = float(removed_cost) if removed_cost is not None else float((strategy.entry_spot_px or spot_price) * spot_qty)
     strategy.total_quantity = max(0.0, float(strategy.total_quantity or 0.0) - float(spot_qty))
@@ -235,6 +258,8 @@ async def remove(db, exchange, adapter, strategy, remove_amount_usdc: float) -> 
 async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
     asset = strategy.asset
     config = await ensure_strategy_config(exchange, asset, strategy.config or {})
+    rules = _get_rules(_exchange_id(exchange))
+    leverage = _target_leverage(rules, asset)
     strategy.config = config
     spot_symbol = config.get("spot_symbol")
     perp_symbol = config.get("perp_symbol")
@@ -283,7 +308,6 @@ async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
         raise ValueError(remove_result.get("error") or "remove_margin failed")
     spot_price = await get_last_price(exchange, spot_symbol)
     perp_price = await get_last_price(exchange, perp_symbol)
-    leverage = float(DEFAULT_LEVERAGE)
     safety_buffer = float(MARGIN_SAFETY_BUFFER)
     base_amount = removable / (spot_price * (1.0 + (safety_buffer / leverage)))
     base_amount = _align_base_amount(exchange, spot_symbol, perp_symbol, base_amount, spot_price, perp_price)
@@ -294,17 +318,17 @@ async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
     if spot_amount <= 0 or perp_amount <= 0:
         await adapter.add_margin(exchange, perp_symbol, removable)
         return {"executed": False, "reason": "additional size below minimum", "strategy": strategy}
-    spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount)
+    spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount, _market_params(spot_price))
     filled = float(spot_order.get("filled") or spot_order.get("amount") or spot_amount)
     entry_spot_px = float(spot_order.get("average") or spot_price)
     try:
         perp_price = await get_last_price(exchange, perp_symbol)
         perp_amount = perp_amount_to_precision(exchange, perp_symbol, config, filled, perp_price)
-        perp_order = await exchange.create_market_sell_order(perp_symbol, perp_amount)
+        perp_order = await exchange.create_market_sell_order(perp_symbol, perp_amount, _market_params(perp_price))
     except Exception as exc:
         rollback_errors = []
         try:
-            await exchange.create_market_sell_order(spot_symbol, filled)
+            await exchange.create_market_sell_order(spot_symbol, filled, _market_params(entry_spot_px))
         except Exception as rollback_exc:
             rollback_errors.append(f"spot_rollback_failed: {rollback_exc}")
         try:
@@ -330,11 +354,11 @@ async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
             perp_filled = float(perp_order.get("filled") or perp_order.get("amount") or perp_amount)
             if perp_filled > 0:
                 try:
-                    await exchange.create_market_buy_order(perp_symbol, perp_filled)
+                    await exchange.create_market_buy_order(perp_symbol, perp_filled, _market_params(entry_perp_px))
                 except Exception as rollback_exc:
                     rollback_errors.append(f"perp_rollback_failed: {rollback_exc}")
             try:
-                await exchange.create_market_sell_order(spot_symbol, filled)
+                await exchange.create_market_sell_order(spot_symbol, filled, _market_params(entry_spot_px))
             except Exception as rollback_exc:
                 rollback_errors.append(f"spot_rollback_failed: {rollback_exc}")
             try:
@@ -372,6 +396,8 @@ async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
 async def scale_down(db, exchange, adapter, strategy, mark_price: float):
     asset = strategy.asset
     config = await ensure_strategy_config(exchange, asset, strategy.config or {})
+    rules = _get_rules(_exchange_id(exchange))
+    leverage = _target_leverage(rules, asset)
     strategy.config = config
     spot_symbol = config.get("spot_symbol")
     perp_symbol = config.get("perp_symbol")
@@ -386,7 +412,7 @@ async def scale_down(db, exchange, adapter, strategy, mark_price: float):
         live_mark = await get_last_price(exchange, perp_symbol)
     current_size = abs(float((position_info or {}).get("size") or strategy.total_quantity or 0.0))
     current_notional = float(current_size * live_mark)
-    target_notional = float(current_margin * float(DEFAULT_LEVERAGE) / float(MARGIN_SAFETY_BUFFER))
+    target_notional = float(current_margin * leverage / float(MARGIN_SAFETY_BUFFER))
     reduce_notional = float(current_notional - target_notional)
     reduce_base = 0.0 if live_mark <= 0 else float(reduce_notional / live_mark)
     if reduce_base <= 0:
@@ -436,6 +462,7 @@ async def start(
         raise ValueError(f"Minimum amount is {MIN_CAPITAL_USD} USDC.")
     exchange_id = _exchange_id(exchange)
     rules = _get_rules(exchange_id)
+    leverage = _target_leverage(rules, asset)
     if not rules.get("partial_allocation_allowed", True) and available_balance is not None:
         min_required = float(available_balance) * float(MIN_ALLOCATION_PCT)
         if float(capital_usdc) < min_required:
@@ -447,13 +474,12 @@ async def start(
     config = await ensure_strategy_config(exchange, asset, None)
     spot_symbol = config.get("spot_symbol")
     perp_symbol = config.get("perp_symbol")
-    isolated_result = await adapter.ensure_isolated_margin(exchange, perp_symbol, float(DEFAULT_LEVERAGE))
+    isolated_result = await adapter.ensure_isolated_margin(exchange, perp_symbol, leverage)
     if isinstance(isolated_result, dict) and not isolated_result.get("success", False):
         raise ValueError(isolated_result.get("error") or "cannot set isolated margin")
     spot_price = await get_last_price(exchange, spot_symbol)
     perp_price = await get_last_price(exchange, perp_symbol)
     trade_capital = float(capital_usdc) / float(FEE_BUFFER)
-    leverage = float(DEFAULT_LEVERAGE)
     safety_buffer = float(MARGIN_SAFETY_BUFFER)
     base_amount = trade_capital / (spot_price * (1.0 + (safety_buffer / leverage)))
     base_amount = _align_base_amount(exchange, spot_symbol, perp_symbol, base_amount, spot_price, perp_price)
@@ -464,7 +490,7 @@ async def start(
     if spot_amount <= 0 or perp_amount <= 0:
         raise ValueError("Invalid amount (too small)")
 
-    spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount)
+    spot_order = await exchange.create_market_buy_order(spot_symbol, spot_amount, _market_params(spot_price))
     filled = float(spot_order.get("filled") or spot_order.get("amount") or spot_amount)
     entry_spot_px = float(spot_order.get("average") or spot_price)
     real_spot_capital = float(spot_order.get("cost") or (entry_spot_px * filled))
@@ -472,9 +498,9 @@ async def start(
     try:
         perp_price = await get_last_price(exchange, perp_symbol)
         perp_amount = perp_amount_to_precision(exchange, perp_symbol, config, filled, perp_price)
-        perp_order = await exchange.create_market_sell_order(perp_symbol, perp_amount)
+        perp_order = await exchange.create_market_sell_order(perp_symbol, perp_amount, _market_params(perp_price))
     except Exception:
-        await exchange.create_market_sell_order(spot_symbol, filled)
+        await exchange.create_market_sell_order(spot_symbol, filled, _market_params(entry_spot_px))
         raise
 
     entry_perp_px = float(perp_order.get("average") or perp_price)
@@ -488,9 +514,9 @@ async def start(
             try:
                 perp_filled = float(perp_order.get("filled") or perp_order.get("amount") or perp_amount)
                 if perp_filled > 0:
-                    await exchange.create_market_buy_order(perp_symbol, perp_filled)
+                    await exchange.create_market_buy_order(perp_symbol, perp_filled, _market_params(entry_perp_px))
             finally:
-                await exchange.create_market_sell_order(spot_symbol, filled)
+                await exchange.create_market_sell_order(spot_symbol, filled, _market_params(entry_spot_px))
             raise ValueError(margin_result.get("error") or "add_margin failed")
     final_position_info = await adapter.fetch_position_info(exchange, perp_symbol)
     final_margin = float((final_position_info or {}).get("margin") or 0.0)

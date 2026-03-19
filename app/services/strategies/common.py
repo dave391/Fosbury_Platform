@@ -37,6 +37,17 @@ def pick_market(markets, base: str, quote: str, market_type: str):
     return candidates[0] if candidates else None
 
 
+def _market_from_symbol(exchange, symbol: str, market_type: str, quote: str):
+    market = (exchange.markets or {}).get(symbol)
+    if not isinstance(market, dict):
+        return None
+    if not market.get(market_type):
+        return None
+    if str(market.get("quote") or "").upper() != str(quote or "").upper():
+        return None
+    return market
+
+
 async def build_strategy_config(
     exchange,
     asset: str,
@@ -51,9 +62,15 @@ async def build_strategy_config(
     quote = rules.get("quote") or "USDC"
     aliases = rules.get("spot_asset_aliases") or {}
     spot_asset = aliases.get(asset, asset)
+    spot_symbol_overrides = rules.get("spot_symbol_overrides") or {}
+    perp_symbol_overrides = rules.get("perp_symbol_overrides") or {}
     markets = list(exchange.markets.values())
-    spot_market = pick_market(markets, spot_asset, quote, "spot")
-    perp_market = pick_market(markets, asset, quote, "swap")
+    spot_market = _market_from_symbol(exchange, spot_symbol_overrides.get(asset), "spot", quote)
+    perp_market = _market_from_symbol(exchange, perp_symbol_overrides.get(asset), "swap", quote)
+    if not spot_market:
+        spot_market = pick_market(markets, spot_asset, quote, "spot")
+    if not perp_market:
+        perp_market = pick_market(markets, asset, quote, "swap")
     if not spot_market:
         spot_id = f"{spot_asset}_{quote}"
         spot_symbol = await resolve_symbol(exchange, spot_id)
