@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -18,6 +19,7 @@ from core.database import get_db
 from core.enums import ExchangeName
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _parse_int(value):
@@ -217,6 +219,12 @@ async def start_strategy(
             user_email=user_email,
         )
     except Exception:
+        logger.exception(
+            "add_strategy_capital_failed user_id=%s strategy_id=%s amount=%s",
+            user_id,
+            strategy_id,
+            added_amount_usdc,
+        )
         return await render_strategy_page(
             request,
             service,
