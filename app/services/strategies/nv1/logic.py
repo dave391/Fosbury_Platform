@@ -272,6 +272,9 @@ async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
     unrealized_pnl = abs(float((position_info or {}).get("unrealized_pnl") or 0.0))
     removable_factor = float(SCALE_UP_REMOVABLE_FACTOR)
     max_removable = max(float((current_margin - initial_margin - unrealized_pnl) * removable_factor), 0.0)
+    adapter_max = float((position_info or {}).get("max_withdrawable") or 0.0)
+    if adapter_max > 0:
+        max_removable = min(float(margin_to_use), float(adapter_max)) * float(removable_factor)
     logger.info(
         "nv1_scale_up_calc asset=%s perp=%s excess_margin=%.8f current_margin=%.8f initial_margin=%.8f unrealized_pnl=%.8f max_removable=%.8f factor=%.6f",
         asset,
@@ -287,10 +290,11 @@ async def scale_up(db, exchange, adapter, strategy, excess_margin: float):
         return {"executed": False, "reason": "no removable margin available", "strategy": strategy}
     removable = min(float(margin_to_use), float(max_removable))
     logger.info(
-        "nv1_scale_up_removable asset=%s perp=%s requested=%.8f removable=%.8f",
+        "nv1_scale_up_removable asset=%s perp=%s requested=%.8f max_removable=%.8f removable=%.8f",
         asset,
         perp_symbol,
         margin_to_use,
+        max_removable,
         removable,
     )
     remove_result = await adapter.remove_margin(exchange, perp_symbol, removable)

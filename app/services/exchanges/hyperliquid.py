@@ -142,6 +142,16 @@ class HyperliquidExchange(ExchangeAdapter):
                 mark_price = None
         unrealized_pnl = to_float(position.get("unrealizedPnl"))
         leverage = to_float(position.get("leverage"))
+        collateral_val = float(margin or 0.0)
+        leverage_val = float(leverage or 0.0)
+        size_val = abs(float(size or 0.0))
+        mark_val = float(mark_price or 0.0)
+        notional = float(size_val * mark_val) if mark_val > 0 else 0.0
+        if leverage_val > 0 and notional > 0:
+            required = max(float(notional / leverage_val), float(0.1 * notional))
+        else:
+            required = collateral_val
+        max_withdrawable = max(float(collateral_val - required), 0.0)
 
         return {
             "liquidation_price": float(liquidation_price or 0.0),
@@ -151,6 +161,7 @@ class HyperliquidExchange(ExchangeAdapter):
             "mark_price": float(mark_price or 0.0),
             "unrealized_pnl": float(unrealized_pnl or 0.0),
             "leverage": float(leverage or 0.0),
+            "max_withdrawable": float(max_withdrawable),
         }
 
     async def ensure_isolated_margin(
