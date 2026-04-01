@@ -184,6 +184,12 @@ class HyperliquidExchange(ExchangeAdapter):
         if not spot_id and not perp_id:
             return 0.0, 0.0
 
+        def to_float(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
         def normalize(value: str) -> str:
             return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
 
@@ -203,31 +209,114 @@ class HyperliquidExchange(ExchangeAdapter):
                 return True
             return current == quote_norm
 
-        logs = await self.fetch_transaction_logs(exchange, quote, start_ms, end_ms)
         funding_delta = 0.0
         fees_delta = 0.0
-        for item in logs or []:
-            instrument = item.get("instrument")
-            entry_type = item.get("entry_type")
-            currency_code = item.get("currency")
-            if entry_type == "funding":
-                if not match_symbol(instrument, perp_norm):
+        funding_count = 0
+        fee_count = 0
+
+        if perp_id:
+            try:
+                funding_items = await exchange.fetch_funding_history(
+                    perp_id,
+                    int(start_ms),
+                    500,
+                    {"until": int(end_ms)},
+                )
+            except Exception:
+                funding_items = []
+            for item in funding_items or []:
+                if not isinstance(item, dict):
                     continue
-                funding = item.get("funding")
+                symbol = item.get("symbol")
+                if symbol and not match_symbol(symbol, perp_norm):
+                    continue
+                funding = to_float(item.get("amount"))
+                if funding is None:
+                    info = item.get("info")
+                    info = info if isinstance(info, dict) else {}
+                    delta = info.get("delta")
+                    delta = delta if isinstance(delta, dict) else {}
+                    funding = to_float(delta.get("usdc"))
                 if funding is None:
                     continue
                 funding_delta += float(funding)
-            elif entry_type == "fee":
-                matches_spot = match_symbol(instrument, spot_norm)
-                matches_perp = match_symbol(instrument, perp_norm)
-                if not (matches_spot or matches_perp):
+                funding_count += 1
+
+        for trade_symbol, target_norm in ((perp_id, perp_norm), (spot_id, spot_norm)):
+            if not trade_symbol:
+                continue
+            try:
+                trades = await exchange.fetch_my_trades(
+                    trade_symbol,
+                    int(start_ms),
+                    500,
+                    {"until": int(end_ms)},
+                )
+            except Exception:
+                trades = []
+            for trade in trades or []:
+                if not isinstance(trade, dict):
                     continue
-                if not quote_matches(currency_code):
+                symbol = trade.get("symbol") or trade_symbol
+                if not match_symbol(symbol, target_norm):
                     continue
-                fee = item.get("fee")
-                if fee is None:
+                fee_entries = trade.get("fees")
+                if isinstance(fee_entries, list) and fee_entries:
+                    current_fees = fee_entries
+                else:
+                    single_fee = trade.get("fee")
+                    current_fees = [single_fee] if isinstance(single_fee, dict) else []
+                if not current_fees:
                     continue
-                fees_delta += abs(float(fee))
+                price = to_float(trade.get("price"))
+                base_asset = str(symbol).split("/", 1)[0]
+                base_norm = normalize(base_asset)
+                for fee_info in current_fees:
+                    if not isinstance(fee_info, dict):
+                        continue
+                    fee_value = to_float(fee_info.get("cost"))
+                    if fee_value is None:
+                        continue
+                    fee_currency = fee_info.get("currency")
+                    fee_currency_norm = normalize(fee_currency)
+                    fee_usdc = None
+                    if quote_matches(fee_currency):
+                        fee_usdc = abs(float(fee_value))
+                    elif (
+                        price is not None
+                        and price > 0
+                        and fee_currency_norm in (base_norm, f"U{base_norm}")
+                    ):
+                        fee_usdc = abs(float(fee_value) * float(price))
+                    if fee_usdc is None:
+                        continue
+                    fees_delta += float(fee_usdc)
+                    fee_count += 1
+
+        if funding_count == 0 or fee_count == 0:
+            logs = await self.fetch_transaction_logs(exchange, quote, start_ms, end_ms)
+            for item in logs or []:
+                instrument = item.get("instrument")
+                entry_type = item.get("entry_type")
+                currency_code = item.get("currency")
+                if entry_type == "funding" and funding_count == 0:
+                    if not match_symbol(instrument, perp_norm):
+                        continue
+                    funding = item.get("funding")
+                    if funding is None:
+                        continue
+                    funding_delta += float(funding)
+                elif entry_type == "fee" and fee_count == 0:
+                    matches_spot = match_symbol(instrument, spot_norm)
+                    matches_perp = match_symbol(instrument, perp_norm)
+                    if not (matches_spot or matches_perp):
+                        continue
+                    if not quote_matches(currency_code):
+                        continue
+                    fee = item.get("fee")
+                    if fee is None:
+                        continue
+                    fees_delta += abs(float(fee))
         return funding_delta, fees_delta
 
     async def fetch_quote_balance(self, exchange, quote: str) -> float:
