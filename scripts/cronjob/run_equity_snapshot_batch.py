@@ -12,6 +12,7 @@ from core.database import AsyncSessionLocal
 from core.enums import StrategyStatus
 from core.models import EquitySnapshot, Strategy, ExchangeAccount
 from app.services.exchange_service import ExchangeService
+from app.services.strategies.registry import get_strategy_registry
 
 
 async def run_snapshot_batch(snapshot_date: Optional[date] = None):
@@ -52,6 +53,7 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
             strategies_by_account.setdefault(strategy.exchange_account_id, []).append(strategy)
 
         exchange_service = ExchangeService(db)
+        strategy_registry = get_strategy_registry()
         total_strategies = len(strategies)
         total_accounts = len(strategies_by_account)
         created = 0
@@ -109,6 +111,9 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
                         funding_delta, fees_delta = await adapter.fetch_strategy_deltas(
                             exchange, strategy, effective_start_ms, end_ms
                         )
+                        strategy_impl = strategy_registry.get(strategy.strategy_key)
+                        if not strategy_impl:
+                            raise ValueError(f"strategy_not_configured:{strategy.strategy_key}")
 
                         last_result = await db.execute(
                             select(EquitySnapshot)
@@ -124,7 +129,14 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
                             if last_snapshot
                             else strategy.allocated_capital_usdc
                         )
-                        equity_usdc = base_equity + (funding_delta - fees_delta)
+                        equity_usdc = await strategy_impl.get_snapshot_equity_usdc(
+                            exchange=exchange,
+                            adapter=adapter,
+                            strategy=strategy,
+                            base_equity_usdc=float(base_equity or 0.0),
+                            funding_delta_usdc=float(funding_delta or 0.0),
+                            fees_delta_usdc=float(fees_delta or 0.0),
+                        )
 
                         if existing:
                             existing.equity_usdc = equity_usdc

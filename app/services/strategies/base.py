@@ -44,6 +44,20 @@ class StrategyAdapter(ABC):
     async def stop(self, db: AsyncSession, exchange, strategy: Strategy) -> float:
         raise NotImplementedError
 
+    async def get_snapshot_equity_usdc(
+        self,
+        exchange,
+        adapter,
+        strategy: Strategy,
+        base_equity_usdc: float,
+        funding_delta_usdc: float,
+        fees_delta_usdc: float,
+    ) -> float:
+        _ = exchange
+        _ = adapter
+        _ = strategy
+        return float(base_equity_usdc + (funding_delta_usdc - fees_delta_usdc))
+
 
 class StrategyRegistry(Protocol):
     def get(self, key: str) -> Optional[StrategyAdapter]:
