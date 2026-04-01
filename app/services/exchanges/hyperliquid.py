@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Dict, Any, Tuple, Optional
 import logging
 import ccxt.async_support as ccxt
@@ -75,22 +76,159 @@ class HyperliquidExchange(ExchangeAdapter):
     async def fetch_transaction_logs(
         self, exchange, currency: str, start_ms: int, end_ms: int
     ) -> List[Dict[str, Any]]:
-        _ = exchange
-        _ = currency
-        _ = start_ms
-        _ = end_ms
-        # TODO: implementare con userNonFundingLedgerUpdates
-        return []
+        def to_float(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        logs: List[Dict[str, Any]] = []
+        seen = set()
+        since = int(start_ms)
+        limit = 500
+        attempts = 0
+        while since <= end_ms and attempts < 20:
+            attempts += 1
+            try:
+                batch = await exchange.fetch_ledger(
+                    currency,
+                    since,
+                    limit,
+                    {"until": end_ms},
+                )
+            except Exception:
+                break
+            if not isinstance(batch, list) or not batch:
+                break
+            max_ts = since
+            for entry in batch:
+                if not isinstance(entry, dict):
+                    continue
+                ts = entry.get("timestamp")
+                if ts is None:
+                    ts = exchange.parse8601(entry.get("datetime"))
+                if ts is None:
+                    continue
+                ts = int(ts)
+                if ts < start_ms or ts > end_ms:
+                    continue
+                if ts > max_ts:
+                    max_ts = ts
+                info = entry.get("info")
+                info = info if isinstance(info, dict) else {}
+                entry_type = str(
+                    entry.get("type")
+                    or info.get("type")
+                    or info.get("deltaType")
+                    or ""
+                ).lower()
+                instrument = (
+                    entry.get("symbol")
+                    or info.get("coin")
+                    or info.get("symbol")
+                    or currency
+                )
+                currency_code = entry.get("currency") or info.get("token") or currency
+                amount = to_float(entry.get("amount"))
+                fee_data = entry.get("fee")
+                fee_value = None
+                if isinstance(fee_data, dict):
+                    fee_value = to_float(fee_data.get("cost"))
+                else:
+                    fee_value = to_float(fee_data)
+                if "funding" in entry_type and amount is not None:
+                    key = ("funding", ts, str(instrument), float(amount))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    logs.append(
+                        {
+                            "instrument": instrument,
+                            "entry_type": "funding",
+                            "currency": currency_code,
+                            "timestamp": ts,
+                            "funding": float(amount),
+                            "fee": None,
+                        }
+                    )
+                elif fee_value is not None and ("fee" in entry_type or "trade" in entry_type):
+                    key = ("fee", ts, str(instrument), float(fee_value))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    logs.append(
+                        {
+                            "instrument": instrument,
+                            "entry_type": "fee",
+                            "currency": currency_code,
+                            "timestamp": ts,
+                            "funding": None,
+                            "fee": abs(float(fee_value)),
+                        }
+                    )
+            if len(batch) < limit or max_ts <= since:
+                break
+            since = max_ts + 1
+            rate_limit = getattr(exchange, "rateLimit", 0) or 0
+            if rate_limit:
+                await asyncio.sleep(rate_limit / 1000)
+        return logs
 
     async def fetch_strategy_deltas(
         self, exchange, strategy: Any, start_ms: int, end_ms: int
     ) -> Tuple[float, float]:
-        _ = exchange
-        _ = strategy
-        _ = start_ms
-        _ = end_ms
-        # TODO: implementare quando servono i delta funding/fees
-        return 0.0, 0.0
+        config = strategy.config or {}
+        quote = str(config.get("quote") or "USDC")
+        spot_id = config.get("spot_symbol") or config.get("spot_id")
+        perp_id = config.get("perp_symbol") or config.get("perp_id")
+        if not spot_id and not perp_id:
+            return 0.0, 0.0
+
+        def normalize(value: str) -> str:
+            return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
+
+        spot_norm = normalize(spot_id)
+        perp_norm = normalize(perp_id)
+        quote_norm = normalize(quote)
+
+        def match_symbol(value: str, target: str) -> bool:
+            current = normalize(value)
+            if not current or not target:
+                return False
+            return current == target
+
+        def quote_matches(value: str) -> bool:
+            current = normalize(value)
+            if not current:
+                return True
+            return current == quote_norm
+
+        logs = await self.fetch_transaction_logs(exchange, quote, start_ms, end_ms)
+        funding_delta = 0.0
+        fees_delta = 0.0
+        for item in logs or []:
+            instrument = item.get("instrument")
+            entry_type = item.get("entry_type")
+            currency_code = item.get("currency")
+            if entry_type == "funding":
+                if not match_symbol(instrument, perp_norm):
+                    continue
+                funding = item.get("funding")
+                if funding is None:
+                    continue
+                funding_delta += float(funding)
+            elif entry_type == "fee":
+                matches_spot = match_symbol(instrument, spot_norm)
+                matches_perp = match_symbol(instrument, perp_norm)
+                if not (matches_spot or matches_perp):
+                    continue
+                if not quote_matches(currency_code):
+                    continue
+                fee = item.get("fee")
+                if fee is None:
+                    continue
+                fees_delta += abs(float(fee))
+        return funding_delta, fees_delta
 
     async def fetch_quote_balance(self, exchange, quote: str) -> float:
         balance = await exchange.fetch_balance({"type": "spot"})

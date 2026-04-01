@@ -26,6 +26,22 @@ class HLPStrategy(StrategyAdapter):
     async def fetch_usdc_balance(self, exchange, adapter) -> float:
         return await adapter.fetch_quote_balance(exchange, "USDC")
 
+    async def get_snapshot_equity_usdc(
+        self,
+        exchange,
+        adapter,
+        strategy: Strategy,
+        base_equity_usdc: float,
+        funding_delta_usdc: float,
+        fees_delta_usdc: float,
+    ) -> float:
+        _ = adapter
+        _ = strategy
+        _ = base_equity_usdc
+        _ = funding_delta_usdc
+        _ = fees_delta_usdc
+        return float(await self._get_vault_equity(exchange))
+
     async def start(
         self,
         db: AsyncSession,
