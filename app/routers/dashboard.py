@@ -44,8 +44,9 @@ async def dashboard(
     )
     user_email = await get_user_email(user_id, db)
     return templates.TemplateResponse(
-        "dashboard.html",
-        {"request": request, "user_email": user_email, "dashboard_json": dashboard_json, **data},
+        request=request,
+        name="dashboard.html",
+        context={"request": request, "user_email": user_email, "dashboard_json": dashboard_json, **data},
     )
 
 

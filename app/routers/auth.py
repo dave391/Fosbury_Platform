@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="register.html", context={"request": request})
 
 
 @router.post("/register")
@@ -31,8 +31,9 @@ async def register_user(
 
     if error:
         return templates.TemplateResponse(
-            "register.html",
-            {"request": request, "error": error},
+            request=request,
+            name="register.html",
+            context={"request": request, "error": error},
         )
 
     return RedirectResponse(url="/login", status_code=303)
@@ -40,7 +41,7 @@ async def register_user(
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="login.html", context={"request": request})
 
 
 @router.post("/login")
@@ -55,8 +56,9 @@ async def login_user(
 
     if not user:
         return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Invalid credentials"},
+            request=request,
+            name="login.html",
+            context={"request": request, "error": "Invalid credentials"},
         )
 
     response = RedirectResponse(url="/dashboard", status_code=303)
