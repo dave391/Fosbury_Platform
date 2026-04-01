@@ -9,7 +9,6 @@ from sqlalchemy.engine.url import make_url
 
 from core.config import settings
 from core.database import AsyncSessionLocal
-from core.enums import StrategyStatus
 from core.models import EquitySnapshot, Strategy, ExchangeAccount
 from app.services.exchange_service import ExchangeService
 from app.services.strategies.registry import get_strategy_registry
@@ -19,7 +18,6 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
     snapshot_day = snapshot_date or (date.today() - timedelta(days=1))
     start_dt = datetime.combine(snapshot_day, time.min, tzinfo=timezone.utc)
     end_dt = start_dt + timedelta(days=1)
-    end_ms = int(end_dt.timestamp() * 1000)
     run_id = uuid4().hex
     debug = os.getenv("CRON_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
     try:
@@ -39,11 +37,14 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(Strategy).where(Strategy.status == StrategyStatus.ACTIVE)
+            select(Strategy).where(
+                Strategy.created_at < end_dt,
+                (Strategy.closed_at.is_(None) | (Strategy.closed_at > start_dt)),
+            )
         )
         strategies = result.scalars().all()
         if not strategies:
-            print(f"[equity_snapshot] no active strategies, run_id={run_id}")
+            print(f"[equity_snapshot] no eligible strategies, run_id={run_id}")
             return
 
         strategies_by_account = {}
@@ -64,7 +65,7 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
 
         if debug:
             print(
-                f"[equity_snapshot] active_strategies={total_strategies} accounts_with_strategies={total_accounts} run_id={run_id}"
+                f"[equity_snapshot] eligible_strategies={total_strategies} accounts_with_strategies={total_accounts} run_id={run_id}"
             )
 
         for account_id, account_strategies in strategies_by_account.items():
@@ -102,14 +103,21 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
                         strategy_start = strategy.created_at
                         if strategy_start and strategy_start.tzinfo is None:
                             strategy_start = strategy_start.replace(tzinfo=timezone.utc)
+                        strategy_end = strategy.closed_at
+                        if strategy_end and strategy_end.tzinfo is None:
+                            strategy_end = strategy_end.replace(tzinfo=timezone.utc)
                         effective_start_dt = start_dt
                         if strategy_start and strategy_start > effective_start_dt:
                             effective_start_dt = strategy_start
-                        if effective_start_dt >= end_dt:
+                        effective_end_dt = end_dt
+                        if strategy_end and strategy_end < effective_end_dt:
+                            effective_end_dt = strategy_end
+                        if effective_start_dt >= effective_end_dt:
                             continue
                         effective_start_ms = int(effective_start_dt.timestamp() * 1000)
+                        effective_end_ms = int(effective_end_dt.timestamp() * 1000)
                         funding_delta, fees_delta = await adapter.fetch_strategy_deltas(
-                            exchange, strategy, effective_start_ms, end_ms
+                            exchange, strategy, effective_start_ms, effective_end_ms
                         )
                         strategy_impl = strategy_registry.get(strategy.strategy_key)
                         if not strategy_impl:
@@ -143,7 +151,7 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
                             existing.funding_delta_usdc = funding_delta
                             existing.fees_delta_usdc = fees_delta
                             existing.run_id = run_id
-                            existing.as_of = end_dt
+                            existing.as_of = effective_end_dt
                             updated += 1
                         else:
                             db.add(
@@ -154,7 +162,7 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
                                     funding_delta_usdc=funding_delta,
                                     fees_delta_usdc=fees_delta,
                                     run_id=run_id,
-                                    as_of=end_dt,
+                                    as_of=effective_end_dt,
                                 )
                             )
                             created += 1
@@ -170,7 +178,7 @@ async def run_snapshot_batch(snapshot_date: Optional[date] = None):
                 await exchange.close()
 
         print(
-            f"[equity_snapshot] done run_id={run_id} active_strategies={total_strategies} "
+            f"[equity_snapshot] done run_id={run_id} eligible_strategies={total_strategies} "
             f"accounts={total_accounts} created={created} updated={updated} "
             f"skipped_missing_account={skipped_missing_account} skipped_missing_exchange={skipped_missing_exchange} "
             f"skipped_exception={skipped_exception}"
