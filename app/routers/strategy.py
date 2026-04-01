@@ -57,8 +57,9 @@ async def render_strategy_page(
     active_count = len(strategies)
     total_allocated = sum(strategy.allocated_capital_usdc for strategy in strategies)
     return templates.TemplateResponse(
-        "strategy.html",
-        {
+        request=request,
+        name="strategy.html",
+        context={
             "request": request,
             "msg": msg,
             "success": success,

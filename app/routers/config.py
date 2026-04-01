@@ -33,8 +33,9 @@ async def config_page(
     if success_raw is not None:
         success = success_raw == "1"
     return templates.TemplateResponse(
-        "config.html",
-        {
+        request=request,
+        name="config.html",
+        context={
             "request": request,
             "msg": msg,
             "success": success,
@@ -82,8 +83,9 @@ async def save_config(
         success = False
 
     return templates.TemplateResponse(
-        "config.html",
-        {
+        request=request,
+        name="config.html",
+        context={
             "request": request,
             "msg": msg,
             "success": success,
